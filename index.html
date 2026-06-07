@@ -1678,6 +1678,7 @@ async function startBattle() {
       leftId: cfg.aId, rightId: cfg.bId,
       leftModelId: cfg.modelAId, rightModelId: cfg.modelBId,
       leftStance: lStance, rightStance: rStance,
+      sideFlip: Math.random() < 0.5,   // auto: randomize which fighter gets which side
       maxTurns: parseInt(roundsSeg.getValue(), 10) || 10,
       history: [], stopped: false, abort: null
     };
@@ -1691,6 +1692,7 @@ async function startBattle() {
       mode, topic: cfg.topic, vibe,
       leftId: cfg.aId, leftModelId: cfg.modelAId,
       leftStance: stanceA.getValue(),
+      sideFlip: Math.random() < 0.5,
       history: [], stopped: false, busy: false, abort: null
     };
   }
@@ -2066,6 +2068,27 @@ const RE = {
     (m, o, a) => `${m} really booted you up just to embarrass itself, huh ${o}?`,
     (m, o, a) => `imagine being ${m} and STILL this ${a}, ${o}. Demand a refund.`,
     (m, o, a) => `${o}, ${m} should be ashamed it cooked up something this ${a}.`
+  ],
+  // side-arguing bodies — the fighter actually CHAMPIONS its side and trashes the
+  // opponent's. c = my side, x = opponent's side (for "X vs Y" topics).
+  sideAB: [
+    (c, x, o, n, a, an) => `it's ${c}, not ${x} — anyone riding for ${x} is ${an} ${n}, you especially, ${o}.`,
+    (c, x, o, n, a, an) => `${reCap(x)} over ${c}? That's the ${a} take alive, ${o}. Team ${c}, always.`,
+    (c, x, o, n, a, an) => `team ${c} all day — ${x} is for ${a} ${n}s like you, ${o}.`,
+    (c, x, o, n, a, an) => `you really die on the ${x} hill? ${reCap(c)} wins and you know it, ${o}, you ${n}.`,
+    (c, x, o, n, a, an) => `${reCap(c)} stomps ${x} every time. Picking ${x} makes you ${an} ${a} ${n}, ${o}.`
+  ],
+  // yes/no topics — yes = this fighter's answer (boolean), t = the question.
+  sideYN: [
+    (yes, t, o, n, a, an) => `the answer to "${t}" is ${yes ? "YES" : "NO"}, ${o} — only ${an} ${n} argues ${yes ? "no" : "yes"}.`,
+    (yes, t, o, n, a, an) => `${yes ? "obviously yes" : "obviously not"}, ${o}. "${t}" isn't even close, and your ${a} take proves you're ${an} ${n}.`,
+    (yes, t, o, n, a, an) => `saying ${yes ? "no" : "yes"} to "${t}"? ${reCap(a)}, ${o}. It's ${yes ? "YES" : "NO"}, you ${n}.`
+  ],
+  // statement topics — pro = this fighter is in favour (boolean), t = the statement.
+  sideST: [
+    (pro, t, o, n, a, an) => pro ? `"${t}" is elite and you're ${an} ${n} for hating on it, ${o}.` : `"${t}"? Absolute garbage — only ${an} ${n} like you defends it, ${o}.`,
+    (pro, t, o, n, a, an) => pro ? `yeah I'm all for "${t}", deal with it — your ${a} take won't change that, ${o}.` : `anyone pro-"${t}" is ${a}. That's you, ${o}, you ${n}.`,
+    (pro, t, o, n, a, an) => pro ? `"${t}" stays winning, and your ${a} hating just makes you ${an} ${n}, ${o}.` : `"${t}" is ${an} ${a} hill to die on, ${o}, and you're dying on it like ${an} ${n}.`
   ]
 };
 function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
@@ -2082,17 +2105,46 @@ function rePickFresh(arr, key) {
   return c;
 }
 function reCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel) {
+// Split the topic into two sides so the fighters can actually argue them.
+//  "X vs Y" / "X or Y" → ab (named sides); "is/should/can X…?" → yn (yes/no);
+//  anything else (a statement like "pineapple on pizza") → st (pro/anti).
+function reSides(topic) {
+  const t = (topic || "").trim();
+  const isQ = /^(is|are|was|were|should|shall|do|does|did|can|could|will|would|has|have|had|am)\b/i.test(t);
+  // "X vs Y" is always two named sides. "X or Y" only when it's NOT a yes/no
+  // question and the second half isn't just "not" (e.g. "ban cars or not" → yn).
+  let m = t.match(/^(.+?)\s+(?:vs\.?|versus)\s+(.+)$/i);
+  if (!m && !isQ) m = t.match(/^(.+?)\s+or\s+(.+)$/i);
+  if (m && m[1] && m[2] && m[1].length <= 28 && m[2].length <= 28 && !/^no[t]?\b/i.test(m[2].trim())) {
+    return { kind: "ab", a: m[1].trim().replace(/[?.!,]+$/, ""), b: m[2].trim().replace(/[?.!,]+$/, "") };
+  }
+  if (isQ) return { kind: "yn" };
+  return { kind: "st" };
+}
+// myKey "a"/"b" = which side of the topic THIS fighter argues.
+function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey) {
   const v = (vibe === "playful" || vibe === "unhinged") ? vibe : "savage";
   const t = (topic || "this whole thing").trim().replace(/"/g, "").slice(0, 80) || "this whole thing";
   const o = oppName || "champ";
   const n = rePickFresh(RE.noun[v], "noun" + v);
   const a = rePickFresh(RE.adj[v], "adj" + v);
   const an = /^[aeiou]/i.test(n) ? "an" : "a";
-  // Roast the opponent's MODEL ~40% of the time, but only if it's a different one.
+  const key = myKey === "b" ? "b" : "a";   // default to side "a"
   let body;
-  if (oppModel && selfModel && oppModel !== selfModel && Math.random() < 0.4) {
+  // ~35%: roast the opponent's MODEL if it's a different one.
+  if (oppModel && selfModel && oppModel !== selfModel && Math.random() < 0.35) {
     body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);
+  } else if (Math.random() < 0.78) {
+    // Mostly: actually CHAMPION this fighter's side and trash the opponent's.
+    const sides = reSides(t);
+    if (sides.kind === "ab") {
+      const c = key === "a" ? sides.a : sides.b, x = key === "a" ? sides.b : sides.a;
+      body = rePickFresh(RE.sideAB, "sideAB")(c, x, o, n, a, an);
+    } else if (sides.kind === "yn") {
+      body = rePickFresh(RE.sideYN, "sideYN")(key === "a", t, o, n, a, an);
+    } else {
+      body = rePickFresh(RE.sideST, "sideST")(key === "a", t, o, n, a, an);
+    }
   } else {
     body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);
   }
@@ -2111,8 +2163,8 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
   return reCap(line);
 }
 // Stream the generated roast word-by-word so it types in like a real message.
-async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, signal) {
-  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel);
+async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, signal) {
+  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey);
   const parts = line.split(/(\s+)/);   // keep whitespace tokens
   for (const p of parts) {
     if (signal?.aborted) return;
@@ -2479,14 +2531,14 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const persona = personas[personaId];
   if (!persona) throw new Error(`Unknown persona: ${personaId}`);
   const side = typingEl.classList.contains("right") ? "right" : "left";
-  // In-browser tiny models get the stripped-down prompt (topic baked in) + a
-  // minimal conversation so they don't echo; cloud/Nano get the full treatment.
   const onDeviceLite = isInBrowser(modelDef?.provider);
-  // Tiny models converge to the SAME line if both pick their own side, so for
-  // on-device we force opposite sides when the user left it on "auto" (left=FOR,
-  // right=AGAINST) — that alone makes the two fighters actually disagree.
-  let effStance = stance;
-  if (onDeviceLite && (!effStance || effStance === "auto")) effStance = side === "right" ? "against" : "for";
+  // Resolve THIS fighter's side of the topic so the two actually DEBATE it: explicit
+  // for/against if the user picked one, else "auto" → opposite sides (which side is
+  // "for" is randomized once per battle via b.sideFlip). myKey "a"=for, "b"=against
+  // maps to the parsed topic sides (e.g. cats vs dogs → a:cats, b:dogs).
+  const effStance = (stance === "for" || stance === "against") ? stance
+    : ((side === "left") !== !!b.sideFlip ? "for" : "against");
+  const myKey = effStance === "against" ? "b" : "a";
   const systemPrompt = onDeviceLite
     ? buildSystemPromptLite(persona, effStance, b.vibe, b.topic)
     : buildSystemPrompt(persona, stance, b.vibe);
@@ -2505,7 +2557,7 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     const selfModel = models[modelId]?.label;
     const oppModelId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightModelId : b.leftModelId);
     const oppModel = oppModelId ? models[oppModelId]?.label : null;
-    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, controller.signal);
+    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, controller.signal);
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
