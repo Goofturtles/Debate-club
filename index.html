@@ -2125,10 +2125,15 @@ async function* streamOnDevice(systemPrompt, messages, signal) {
 }
 
 // ─── On-device via WebGPU (WebLLM) — no key, runs in the browser ──────
-// Desktop gets the bigger, better Gemma-2-2B; phones get an optimized 4-bit
-// Llama-3.2-1B (~0.9GB) that actually fits in mobile GPU memory. Both run
-// fully on the device — no key, no server, no per-request cost or limit.
+// Runs fully on the device — no key, no server, no per-request cost or limit.
+// Two mobile optimizations so phones don't OOM-crash:
+//  • small CONTEXT WINDOW — WebLLM otherwise allocates a KV cache for the
+//    model's FULL context (up to 128K tokens), which alone can blow past a phone
+//    tab's memory budget. A roast battle needs ~800 tokens, so we cap it small.
+//  • a WEB WORKER — keeps the UI responsive and isolates the model so a load
+//    failure can be caught + fall back instead of hard-crashing the whole page.
 const WEBLLM_CDN = "https://esm.run/@mlc-ai/web-llm";
+const WEBLLM_CTX = 2048;   // context cap → tiny KV cache → fits in phone memory
 function isMobileLike() {
   try { return matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
   catch { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
@@ -2148,7 +2153,18 @@ function pickWebLLMModelChain() {
   if (mem && mem <= 4) return [TINY];                 // small/old phone → smallest model only
   return [LLAMA, TINY];                               // normal phone → Llama-1B, tiny as backup
 }
-const __webllm = { mod: null, engine: null, modelId: null, loading: null };
+const __webllm = { mod: null, engine: null, modelId: null, loading: null, worker: null };
+// A module worker that hosts the WebLLM engine off the main thread. Built from a
+// blob so the static site needs no extra file. If the model OOMs, terminating
+// this worker frees the memory without taking the page down with it.
+function makeWebLLMWorker() {
+  const src =
+    'import { WebWorkerMLCEngineHandler } from "' + WEBLLM_CDN + '";' +
+    'const h = new WebWorkerMLCEngineHandler();' +
+    'self.onmessage = (e) => h.onmessage(e);';
+  const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  return new Worker(url, { type: "module" });
+}
 // Build (or reuse) the engine for this device's model. onProgress(pct, text)
 // fires during the one-time model download. Cached in-browser after first load.
 async function getWebLLMEngine(onProgress) {
@@ -2168,14 +2184,20 @@ async function getWebLLMEngine(onProgress) {
       // Already on this device? Then we load from cache — no second download.
       let cached = false;
       try { cached = mod.hasModelInCache ? await mod.hasModelInCache(id) : false; } catch {}
+      let worker = null;
       try {
-        const engine = await mod.CreateMLCEngine(id, {
-          initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback, cached); } catch {} }
-        });
-        __webllm.engine = engine; __webllm.modelId = id;
+        worker = makeWebLLMWorker();
+        // Run in the worker, with a small context window so the KV cache stays tiny.
+        const engine = await mod.CreateWebWorkerMLCEngine(
+          worker, id,
+          { initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback, cached); } catch {} } },
+          { context_window_size: WEBLLM_CTX }
+        );
+        __webllm.engine = engine; __webllm.modelId = id; __webllm.worker = worker;
         return engine;
       } catch (e) {
         lastErr = e;
+        try { worker?.terminate(); } catch {}   // free the dead worker before trying smaller
         try { console.warn("On-device model couldn't load, trying a smaller one:", id, e); } catch {}
         // fall through to the next (smaller) model in the chain
       }
