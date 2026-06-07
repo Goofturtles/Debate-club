@@ -769,6 +769,13 @@
   .on-device-block { padding: 12px 14px; border: 1px solid rgba(167,139,250,0.28); background: rgba(167,139,250,0.08); border-radius: var(--r-sm); }
   .on-device-note { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-2); }
   .on-device-heading { margin: 0; color: var(--violet) !important; }
+  .free-badge {
+    display: inline-block; vertical-align: 1px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em;
+    color: #052e1a; background: var(--good); padding: 1px 7px; border-radius: 980px;
+    margin-left: 4px;
+  }
+  .free-note { margin: 4px 0 8px; font-size: 12px; line-height: 1.45; color: #6ee7b7; }
   .on-device-dl { margin-top: 10px; }
   .on-device-status { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--text); }
   .on-device-status:empty { display: none; }
@@ -816,7 +823,7 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    Bring your own API key to start &mdash;
+    Add a key to start &mdash; a <strong>free Google Gemini key</strong> works on any phone.
     <a href="#" id="banner-settings-link">Open Settings →</a>
   </div>
 
@@ -1336,7 +1343,7 @@ function buildKeyBlocks() {
         <h3 class="field-label on-device-heading">${p.name} · ${p.label}</h3>
         <a href="${p.keyHelpUrl}" target="_blank" rel="noopener">Learn more ↗</a>
       </div>
-      <p class="on-device-note">Runs entirely in your browser using Chrome's built-in Gemini Nano. No key, no cost. Requires Chrome 138+ (desktop) with the Prompt API enabled (chrome://flags/#prompt-api-for-gemini-nano).</p>
+      <p class="on-device-note">Runs entirely in your browser using Chrome's built-in Gemini Nano. No key, no cost. <strong>Desktop Chrome 138+ only</strong> (needs the Prompt API flag) — it does not work on phones. <strong>On a phone? Use the free Google · Gemini key below.</strong></p>
       <button class="btn btn--small btn--secondary on-device-dl" id="on-device-download" type="button">Check / download Chrome AI</button>
       <div class="on-device-status" id="on-device-status" role="status" aria-live="polite"></div>`;
     container.appendChild(info);
@@ -1350,9 +1357,10 @@ function buildKeyBlocks() {
     block.className = "key-block";
     block.innerHTML = `
       <div class="key-block-head">
-        <label class="field-label" for="key-input-${provId}">${p.name} · ${p.label}</label>
+        <label class="field-label" for="key-input-${provId}">${p.name} · ${p.label}${p.free ? ' <span class="free-badge">FREE</span>' : ''}</label>
         <a href="${p.keyHelpUrl}" target="_blank" rel="noopener">Get a key ↗</a>
       </div>
+      ${p.free ? '<p class="free-note">Free tier, no credit card — works on phones. Best free pick if you\'re not on desktop Chrome.</p>' : ''}
       <div class="key-input-row">
         <input id="key-input-${provId}" class="key-input" type="text" inputmode="text"
                placeholder="${p.envVar === 'ANTHROPIC_API_KEY' ? 'sk-ant-...' : p.envVar === 'OPENAI_API_KEY' ? 'sk-...' : 'AIza...'}"

@@ -74,6 +74,7 @@ export const providers = {
     label: "Gemini",
     color: "#4285f4",
     keyHelpUrl: "https://aistudio.google.com/apikey",
-    envVar: "GOOGLE_API_KEY"
+    envVar: "GOOGLE_API_KEY",
+    free: true   // Google AI Studio has a genuinely free tier (no credit card) — works on phones
   }
 };
