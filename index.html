@@ -874,7 +874,7 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    🔥 Playing free with the built-in roaster. Add a <strong>free key</strong> (no card, 1 tap) and the Debate Club AI becomes a <strong>real AI that knows everything</strong> &amp; argues any topic.
+    🔥 The free Debate Club AI argues any topic with <strong>real Wikipedia facts</strong>. Add a <strong>free key</strong> (no card, 1 tap) to upgrade it to a <strong>full real AI</strong>.
     <a href="#" id="banner-settings-link">Set up →</a>
   </div>
 
@@ -1482,7 +1482,7 @@ function buildKeyBlocks() {
       </div>
       <p class="on-device-note">${hasGem
         ? `<strong>Now powered by real AI</strong> — it knows everything and argues <strong>any topic with real facts</strong> while roasting, and still swears hard in Unhinged. Offline or rate-limited? It falls back to the instant built-in engine automatically. Works on phone and computer.`
-        : `Works <strong>instantly with no key</strong> on every phone — coherent, on-topic, swears in Unhinged. <strong>Add a free key and it becomes a real AI</strong> that knows everything and argues <strong>any topic with real facts</strong> (free, no credit card, works on phone and computer).`}</p>
+        : `Works <strong>with no key</strong> on every phone — it pulls <strong>real facts from Wikipedia</strong> to argue almost any topic, and swears in Unhinged. <strong>Add a free key</strong> and it becomes a full real AI (knows everything, even sharper, works on phone and computer).`}</p>
       ${hasGem ? "" : `<button class="btn btn--small key-get--primary on-device-dl" id="get-free-ai" type="button">⚡ Make it know everything — get free AI</button>`}`;
     const getBtn = block.querySelector("#get-free-ai");
     if (getBtn) getBtn.addEventListener("click", () => {
@@ -1667,6 +1667,10 @@ async function startBattle() {
   // lines (with the OLD topic) into the new thread. Normally unreachable — setup
   // is hidden mid-battle — but cheap insurance against a double-start race.
   if (battle) { battle.stopped = true; if (battle.abort) battle.abort.abort(); }
+  // Give the no-key engine a head start on its live Wikipedia fact lookup so it
+  // "knows stuff" about this topic by the first line. (With a Gemini key the model
+  // already knows everything, so skip the fetch.)
+  if (!getKey("google")) prefetchWiki(cfg.topic);
 
   $("setup").style.display = "none";
   $("match").classList.add("active");
@@ -2512,6 +2516,66 @@ function reKnowledge(topic, sides, key) {
   }
   return rePickFresh(key === "a" ? e.sides.pro : e.sides.anti, "kb" + e.id + (key === "a" ? "p" : "n"));
 }
+// ─── Live Wikipedia facts ─────────────────────────────────────────────────────
+// For ANY topic not in the curated base, the engine pulls REAL facts straight from
+// Wikipedia (free, keyless, CORS-enabled) so it actually "knows stuff" about it —
+// Tesla vs Edison, Renaissance art, your favorite anime, whatever. Cached per topic.
+const __wiki = {};
+function wikiKey(topic) { return (topic || "").trim().replace(/"/g, "").slice(0, 80).toLowerCase(); }
+// Split a Wikipedia intro into clean, quotable fact sentences.
+function extractFacts(text) {
+  return (text || "")
+    .replace(/\([^)]*\)/g, "")                 // drop parentheticals (pronunciations, dates)
+    .replace(/\s+([,.;])/g, "$1").replace(/\s{2,}/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim().replace(/\s*[.;]$/, ""))
+    .filter((s) => s.length >= 25 && s.length <= 150 && /[a-z]/.test(s) && /^[A-Z0-9"]/.test(s) && !/[=|{}]/.test(s))
+    .slice(0, 6);
+}
+// One keyless CORS call: search Wikipedia AND grab the matched article's intro.
+async function fetchWikiFacts(query, signal) {
+  const q = (query || "").trim();
+  if (!q) return [];
+  try {
+    const url = "https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=" +
+      encodeURIComponent(q) + "&gsrlimit=1&prop=extracts&exintro&explaintext&redirects=1&format=json&origin=*";
+    const res = await fetch(url, { signal });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const pages = json?.query?.pages || {};
+    const page = Object.values(pages)[0];
+    return extractFacts(page?.extract);
+  } catch { return []; }
+}
+// Kick off (and cache) a Wikipedia lookup for a topic's side(s). Skips curated
+// topics (the hand-checked base is better). Returns a promise that resolves when done.
+function prefetchWiki(topic) {
+  const tk = wikiKey(topic);
+  if (__wiki[tk]) return __wiki[tk].promise;
+  if (reKnowledgeHas(topic)) { __wiki[tk] = { done: true, skip: true, promise: Promise.resolve() }; return __wiki[tk].promise; }
+  const sides = reSides(tk);
+  const entry = __wiki[tk] = { a: [], b: [], one: [], done: false, promise: null };
+  entry.promise = (async () => {
+    try {
+      if (sides.kind === "ab") {
+        const [fa, fb] = await Promise.all([fetchWikiFacts(sides.a), fetchWikiFacts(sides.b)]);
+        entry.a = fa; entry.b = fb;
+      } else {
+        const subj = tk.replace(/^(is|are|was|were|should|shall|do|does|did|can|could|will|would|has|have|had|am)\b/i, "").replace(/\?+$/, "").trim() || tk;
+        entry.one = await fetchWikiFacts(subj);
+      }
+    } catch {}
+    entry.done = true;
+  })();
+  return entry.promise;
+}
+// A real Wikipedia fact for THIS fighter's side, once the lookup has resolved (or null).
+function reWiki(topic, sides, key) {
+  const w = __wiki[wikiKey(topic)];
+  if (!w || !w.done || w.skip) return null;
+  if (sides.kind === "ab") return rePickFresh(key === "a" ? w.a : w.b, "wk" + wikiKey(topic) + key) || null;
+  return rePickFresh(w.one, "wk" + wikiKey(topic)) || null;
+}
 // Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
 const __reRecent = {};
 function rePickFresh(arr, key) {
@@ -2593,9 +2657,9 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
     } else if (oppModel && selfModel && oppModel !== selfModel && r < 0.08) {
       body = rePickFresh(RE.mjab, "mjab")(oppModel, o, ctx.A());     // roast the opponent's MODEL (rare)
     } else {
-      // A REAL, fact-checked argument for known topics — so they ACTUALLY argue
-      // with substance while insulting each other (not just topic-shaped jabs).
-      const realArg = reKnowledge(t, sides, key);
+      // A REAL argument — curated fact-checked base first, else a live Wikipedia
+      // fact — so they ACTUALLY argue with substance about ANY topic while roasting.
+      const realArg = reKnowledge(t, sides, key) || reWiki(t, sides, key);
       // Topic-aware templates DOMINATE so each topic reads differently.
       const tp = oppId && RE.topicPersona[oppId] && RE.topicPersona[oppId][set];
       if (realArg && r < 0.45) {                                     // real fact + insult
@@ -2637,7 +2701,9 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
     // name like {O} or an ALL-CAPS word; do lowercase a normal capitalized word).
     let tail;
     if (/[.!?]$/.test(opener)) tail = reCap(body);
-    else if (body.startsWith(o) || /^[A-Z]{2,}/.test(body)) tail = body;
+    // Keep names / ALL-CAPS / Proper-Noun phrases (e.g. "Thomas Alva Edison", "Star
+    // Wars") capitalized; only lowercase an ordinary capitalized sentence start.
+    else if (body.startsWith(o) || /^[A-Z]{2,}/.test(body) || /^[A-Z][a-z'’.\-]* [A-Z]/.test(body)) tail = body;
     else if (/^[A-Z][a-z]/.test(body) || /^An? /.test(body)) tail = body.charAt(0).toLowerCase() + body.slice(1);
     else tail = body;
     let l = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
@@ -2667,6 +2733,13 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
 }
 // Stream the generated roast word-by-word so it types in like a real message.
 async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, oppId, glaze, signal) {
+  // Pull live Wikipedia facts so the engine "knows stuff" about this topic. Bounded
+  // wait (longer on the opening line, brief after) so a turn never hangs; if Wikipedia
+  // is slow/offline the engine just falls back to its topic-aware templates.
+  if (!reKnowledgeHas(topic)) {
+    await Promise.race([prefetchWiki(topic), sleep(isReply ? 1200 : 3500)]);
+    if (signal?.aborted) return;
+  }
   const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId, glaze);
   const parts = line.split(/(\s+)/);   // keep whitespace tokens
   for (const p of parts) {
