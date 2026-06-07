@@ -1956,13 +1956,32 @@ function buildSystemPrompt(persona, stance, vibe) {
 }
 
 // Tiny on-device models choke on the full rulebook (they take the *italics*,
-// **bold**, [gif:] and emoji rules literally and spit out garbage). Give them a
-// stripped-down prompt: just one short, plain-text, savage line.
-const BATTLE_RULES_LITE =
-  "\n\nYou are in a savage text roast battle about the topic. Reply with EXACTLY ONE short sentence (under 15 words) that roasts your opponent while arguing your side. " +
-  "Be brutal, funny, and clear. PLAIN TEXT ONLY — no quotation marks, no asterisks, no stage directions, no emojis, no labels, no second sentence. Just the one-line burn.";
-function buildSystemPromptLite(persona, stance, vibe) {
-  return persona.system_prompt + BATTLE_RULES_LITE + stanceLine(stance) + vibeLine(vibe);
+// **bold**, [gif:] and emoji rules literally and spit out garbage) AND they echo
+// whatever data is in the prompt. So: put the TOPIC in the system prompt (nothing
+// to echo in the user turn), give a one-shot example, and explicitly forbid
+// repeating the topic/instructions/opponent.
+function battleRulesLite(topic) {
+  return "\n\nYou are in a savage text roast battle. The debate topic is: " + topic + ". " +
+    "Reply with ONLY one short, savage, funny sentence that argues your side and mocks the other side. " +
+    "PLAIN TEXT ONLY — no quotation marks, no asterisks, no stage directions, no emojis, no labels, no second sentence. " +
+    "Never repeat the topic, these instructions, or your opponent's words — always say something NEW. " +
+    "Example (different topic): Pineapple on pizza? Even your own dog skips that slice.";
+}
+function buildSystemPromptLite(persona, stance, vibe, topic) {
+  return persona.system_prompt + battleRulesLite(topic) + stanceLine(stance) + vibeLine(vibe);
+}
+
+// On-device conversation: keep it MINIMAL so the tiny model has nothing to echo.
+// Topic + stance live in the system prompt; here we only trigger the turn, and to
+// reply we hand over just the rival's last line wrapped in a hard "don't repeat".
+function buildConversationLite(personaId, history) {
+  let lastOpp = null;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn?.persona_id && turn.persona_id !== personaId && typeof turn.content === "string") { lastOpp = turn.content; break; }
+  }
+  if (!lastOpp) return [{ role: "user", content: "Drop your opening one-line roast now:" }];
+  return [{ role: "user", content: `Your rival just said: "${lastOpp}". Do NOT repeat or quote that. Fire back ONE brand-new savage line that mocks them and argues your side:` }];
 }
 
 // Scrub the quirks tiny models add: stray asterisks, leading stage directions
@@ -2180,6 +2199,13 @@ async function* streamOnDevice(systemPrompt, messages, signal) {
 //    failure can be caught + fall back instead of hard-crashing the whole page.
 const WEBLLM_CDN = "https://esm.run/@mlc-ai/web-llm";
 const WEBLLM_CTX = 2048;   // context cap → tiny KV cache → fits in phone memory
+// hasModelInCache() reads the main-thread Cache API, but the model is downloaded
+// + cached by the WORKER; on some engines (notably iOS WebKit) the two scopes
+// don't line up, so the check wrongly returns false and the UI says "Downloading"
+// every time. We also remember, in localStorage, which models we've successfully
+// loaded on this device and trust THAT for the "already have it" label.
+const webllmDoneKey = (id) => "aidebate.webllm.done." + id;
+function webllmWasLoaded(id) { try { return localStorage.getItem(webllmDoneKey(id)) === "1"; } catch { return false; } }
 function isMobileLike() {
   try { return matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
   catch { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
@@ -2224,15 +2250,18 @@ async function getWebLLMEngine(onProgress) {
   if (__webllm.engine && chain.includes(__webllm.modelId)) return __webllm.engine;
   if (__webllm.loading) return __webllm.loading;
   __webllm.loading = (async () => {
+    // Ask the browser to keep our cached model around (cuts re-downloads).
+    try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch {}
     let mod;
     try { mod = __webllm.mod || (__webllm.mod = await import(WEBLLM_CDN)); }
     catch (e) { throw new Error("Couldn't load the on-device AI engine (network blocked?). Add a free Gemini key in Settings instead."); }
     let lastErr;
     for (let i = 0; i < chain.length; i++) {
       const id = chain[i], isFallback = i > 0;
-      // Already on this device? Then we load from cache — no second download.
-      let cached = false;
-      try { cached = mod.hasModelInCache ? await mod.hasModelInCache(id) : false; } catch {}
+      // Already on this device? Trust our own "loaded before" flag first (survives
+      // the worker/main-thread cache-scope mismatch), then the engine's own check.
+      let cached = webllmWasLoaded(id);
+      try { if (!cached && mod.hasModelInCache) cached = await mod.hasModelInCache(id); } catch {}
       let worker = null;
       // Mark "loading" so that if this hard-crashes the tab (uncatchable iOS OOM),
       // the next page load detects it and stops defaulting to on-device.
@@ -2246,6 +2275,7 @@ async function getWebLLMEngine(onProgress) {
           { context_window_size: WEBLLM_CTX }
         );
         try { localStorage.removeItem(WEBLLM_LOADING_KEY); } catch {}   // loaded — no crash
+        try { localStorage.setItem(webllmDoneKey(id), "1"); } catch {}  // remember we have it
         __webllm.engine = engine; __webllm.modelId = id; __webllm.worker = worker;
         return engine;
       } catch (e) {
@@ -2269,7 +2299,7 @@ async function* streamWebLLM(systemPrompt, messages, signal, onProgress) {
   // Tiny on-device models ramble and get incoherent at high temperature, so keep
   // it low and the cap short. We also STOP at the first finished sentence below so
   // the message stays one short line like a real text battle.
-  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 56, temperature: 0.6, messages: chat }); }
+  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 56, temperature: 0.85, top_p: 0.9, messages: chat }); }
   catch (e) { throw new Error(`On-Device AI — ${e.message || e}`); }
   let acc = "", stopped = false;
   for await (const c of chunks) {
@@ -2313,12 +2343,21 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const targetTypingMs = TYPING_MIN_MS + Math.random() * TYPING_VAR_MS;
   const persona = personas[personaId];
   if (!persona) throw new Error(`Unknown persona: ${personaId}`);
-  // In-browser tiny models get the stripped-down prompt; cloud/Nano get the full one.
-  const systemPrompt = isInBrowser(modelDef?.provider)
-    ? buildSystemPromptLite(persona, stance, b.vibe)
-    : buildSystemPrompt(persona, stance, b.vibe);
-  const convo = buildConversationFromPOV(personaId, b.topic, b.history);
   const side = typingEl.classList.contains("right") ? "right" : "left";
+  // In-browser tiny models get the stripped-down prompt (topic baked in) + a
+  // minimal conversation so they don't echo; cloud/Nano get the full treatment.
+  const onDeviceLite = isInBrowser(modelDef?.provider);
+  // Tiny models converge to the SAME line if both pick their own side, so for
+  // on-device we force opposite sides when the user left it on "auto" (left=FOR,
+  // right=AGAINST) — that alone makes the two fighters actually disagree.
+  let effStance = stance;
+  if (onDeviceLite && (!effStance || effStance === "auto")) effStance = side === "right" ? "against" : "for";
+  const systemPrompt = onDeviceLite
+    ? buildSystemPromptLite(persona, effStance, b.vibe, b.topic)
+    : buildSystemPrompt(persona, stance, b.vibe);
+  const convo = onDeviceLite
+    ? buildConversationLite(personaId, b.history)
+    : buildConversationFromPOV(personaId, b.topic, b.history);
 
   let tokenSource;
   if (isOnDeviceModel) {
