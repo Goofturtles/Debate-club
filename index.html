@@ -2185,7 +2185,11 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
   // Trending emoji ~60% of the time.
   if (Math.random() < 0.6) line += " " + rePickFresh(RE.emoji[v], "emoji");
   // Reaction GIF ~28% (renderRichBubble turns [gif: …] into a real Tenor gif).
-  if (Math.random() < 0.28) line += ` [gif: ${Math.random() < 0.35 ? t.slice(0, 30) : rePick(RE.gifq)}]`;
+  // Strip brackets from the query so a topic with a literal ] can't break the [gif:…] tag.
+  if (Math.random() < 0.28) {
+    const gq = (Math.random() < 0.35 ? t.slice(0, 30) : rePick(RE.gifq)).replace(/[\[\]]/g, "");
+    line += ` [gif: ${gq}]`;
+  }
   return line;
 }
 // Stream the generated roast word-by-word so it types in like a real message.
