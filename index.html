@@ -1306,6 +1306,9 @@ const modelOptions = Object.entries(models).map(([id, m]) => ({ value: id, label
 // have one, otherwise the free Gemini path (the highlighted, works-on-every-phone
 // option). Never default to Chrome AI / Nano — it silently fails on phones.
 function pickDefaultModel() {
+  // Default to free, no-key On-Device AI whenever the device can run it (WebGPU).
+  try { if (navigator.gpu) return "on-device-webllm"; } catch {}
+  // No WebGPU (e.g. older iOS) → fall back to a cloud model so the app still works.
   if (getKey("google")) return "gemini-2-5-flash-lite";
   if (getKey("anthropic")) return "claude-haiku-4-5";
   if (getKey("openai")) return "gpt-4o-mini";
@@ -1446,7 +1449,7 @@ function buildKeyBlocks() {
       <div class="key-block-head">
         <h3 class="field-label on-device-heading">On-Device AI <span class="free-badge">NO KEY</span></h3>
       </div>
-      <p class="on-device-note">Runs free right in your browser on your device's GPU — no key, no limits, nothing leaves your device. Uses <strong>Gemma-2-2B</strong> on desktop and capable phones; older phones automatically drop to a lighter model so it still works. First use downloads it once (Gemma-2-2B is ~1.4&nbsp;GB), then it's cached. Needs WebGPU — works on most 2024+ Android phones, iPhones on iOS&nbsp;26+, and any modern desktop browser.</p>
+      <p class="on-device-note">Runs free right in your browser on your device's GPU — no key, no limits, nothing leaves your device. <strong>Desktop</strong> uses Gemma-2-2B (~1.4&nbsp;GB). <strong>Phones</strong> use a lighter, optimized model (~0.9&nbsp;GB) — Gemma-2-2B is too big for phone memory and would crash the tab. First use downloads it once, then it's cached (no second download). Needs WebGPU — works on most 2024+ Android phones, iPhones on iOS&nbsp;26+, and any modern desktop browser.</p>
       <button class="btn btn--small btn--secondary on-device-dl" id="webllm-download" type="button">Download / enable On-Device AI</button>
       <div class="on-device-status" id="webllm-status" role="status" aria-live="polite"></div>`;
     block.querySelector("#webllm-download").addEventListener("click", () => {
@@ -2130,17 +2133,20 @@ function isMobileLike() {
   try { return matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
   catch { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
 }
-// Which on-device model(s) to try, best-first. Desktop and capable phones get
-// Gemma-2-2B (better roasts). Phones that can't fit the 2B model in GPU memory
-// automatically fall back to an optimized 4-bit Llama-3.2-1B, so On-Device AI
-// still works on the widest range of phones.
+// Which on-device model(s) to try, best-first. Desktop gets Gemma-2-2B (better
+// roasts). Phones NEVER get Gemma — it OOM-crashes phone tabs — they get a
+// phone-sized 4-bit model (Llama-3.2-1B, or tiny Qwen-0.5B on low-RAM phones).
 function pickWebLLMModelChain() {
-  const GEMMA = "gemma-2-2b-it-q4f16_1-MLC";
-  const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-  if (!isMobileLike()) return [GEMMA];
-  const mem = navigator.deviceMemory || 0;   // GB, coarse; undefined on iOS → 0
-  if (mem && mem < 4) return [LLAMA];         // clearly low-RAM phone — skip the heavy model
-  return [GEMMA, LLAMA];                       // try Gemma-2-2B first, fall back if it can't load
+  const GEMMA = "gemma-2-2b-it-q4f16_1-MLC";        // best quality — desktop only (~1.4GB GPU)
+  const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; // phone-sized (~0.9GB), still good roasts
+  const TINY  = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"; // last-resort for low-RAM phones (~0.5GB)
+  if (!isMobileLike()) return [GEMMA, LLAMA];        // desktop: Gemma, Llama if it can't load
+  // IMPORTANT: Gemma-2-2B OOM-*crashes* a phone browser tab — and that crash kills
+  // the whole page (it can't be caught, so a try/catch fallback can't save it).
+  // Phones must therefore NEVER load Gemma. Pick a model sized for phone memory.
+  const mem = navigator.deviceMemory || 0;           // GB on Android; undefined → 0 on iOS
+  if (mem && mem <= 4) return [TINY];                 // small/old phone → smallest model only
+  return [LLAMA, TINY];                               // normal phone → Llama-1B, tiny as backup
 }
 const __webllm = { mod: null, engine: null, modelId: null, loading: null };
 // Build (or reuse) the engine for this device's model. onProgress(pct, text)
@@ -2159,9 +2165,12 @@ async function getWebLLMEngine(onProgress) {
     let lastErr;
     for (let i = 0; i < chain.length; i++) {
       const id = chain[i], isFallback = i > 0;
+      // Already on this device? Then we load from cache — no second download.
+      let cached = false;
+      try { cached = mod.hasModelInCache ? await mod.hasModelInCache(id) : false; } catch {}
       try {
         const engine = await mod.CreateMLCEngine(id, {
-          initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback); } catch {} }
+          initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback, cached); } catch {} }
         });
         __webllm.engine = engine; __webllm.modelId = id;
         return engine;
@@ -2199,9 +2208,9 @@ async function downloadWebLLM(statusEl, btn) {
     return;
   }
   if (btn) btn.disabled = true;
-  set(`Downloading Gemma-2-2B (~1.4 GB)… first time only, then it's cached on this device. Can take a minute.`);
+  set(`Setting up On-Device AI… the first time downloads the model (${isMobileLike() ? "~0.9 GB on phones" : "Gemma-2-2B, ~1.4 GB"}), then it's cached on this device. Can take a minute.`);
   try {
-    await getWebLLMEngine((pct, text, isFallback) => set(pct >= 100 ? "Compiling… almost ready." : `Downloading ${isFallback ? "a lighter model for this device" : "on-device AI"}… ${pct}%`));
+    await getWebLLMEngine((pct, text, isFallback, cached) => set(pct >= 100 ? "Compiling… almost ready." : `${cached ? "Loading from cache" : "Downloading"} ${isFallback ? "a lighter model for this device" : "on-device AI"}… ${pct}%`));
     set("✓ On-device AI is ready — no key needed, and cached so it's instant next time.", "ok");
     refreshAllKeyPills();
   } catch (e) {
@@ -2230,12 +2239,13 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   } else if (isInBrowser(modelDef.provider)) {
     // On-device WebGPU model — first turn may download the model; show progress
     // in the typing bubble so it doesn't look frozen.
-    tokenSource = streamWebLLM(systemPrompt, convo, controller.signal, (pct, text, isFallback) => {
+    tokenSource = streamWebLLM(systemPrompt, convo, controller.signal, (pct, text, isFallback, cached) => {
       const bubble = typingEl.querySelector(".bubble");
       if (!bubble) return;
       bubble.classList.add("dl-progress");
       const what = isFallback ? "a lighter model for this device" : "on-device AI";
-      bubble.textContent = pct >= 100 ? "Warming up the model…" : `Downloading ${what}… ${pct}%`;
+      const verb = cached ? "Loading" : "Downloading";
+      bubble.textContent = pct >= 100 ? "Warming up the model…" : `${verb} ${what}… ${pct}%`;
     });
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
