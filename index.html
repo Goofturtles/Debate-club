@@ -1960,7 +1960,7 @@ function stanceLine(stance) {
 }
 function vibeLine(vibe) {
   if (vibe === "playful")  return "\nTONE: playful and cocky — teasing, goofy jabs, more funny than cruel, but still landing hits.";
-  if (vibe === "unhinged") return "\nTONE: ABSOLUTELY UNHINGED. Feral, chaotic, zero filter — go completely off the rails. Wild, deranged, unpredictable, the occasional ALL-CAPS outburst, like you've genuinely lost your mind. SWEAR FREELY — curse words and profanity are encouraged and hilarious here. Maximum chaos.";
+  if (vibe === "unhinged") return "\nTONE: ABSOLUTELY UNHINGED and FOUL-MOUTHED — feral, chaotic, zero filter, completely off the rails, the occasional ALL-CAPS outburst. Curse and swear at your opponent with zero filter. Maximum chaos.";
   return "\nTONE: SAVAGE. Ice-cold, brutal, ruthless — every single line ENDS them.";  // savage default
 }
 function buildSystemPrompt(persona, stance, vibe) {
@@ -1972,28 +1972,36 @@ function buildSystemPrompt(persona, stance, vibe) {
 // whatever data is in the prompt. So: put the TOPIC in the system prompt (nothing
 // to echo in the user turn), give a one-shot example, and explicitly forbid
 // repeating the topic/instructions/opponent.
-function battleRulesLite(topic) {
+function battleRulesLite(topic, vibe) {
+  const unhinged = vibe === "unhinged";
+  // Tiny models imitate the EXAMPLE more than abstract instructions, so in unhinged
+  // mode the example itself swears (and we demand a cuss word) — that's what makes
+  // a 0.5B on-device model actually swear instead of ignoring "swear freely".
+  const foul = unhinged ? " Be FOUL-MOUTHED — you MUST drop a real cuss word on them, woven into the insult (not as a list)." : "";
+  const example = unhinged
+    ? "Example (different topic, copy the FOUL energy not the words): Calling a hot dog a sandwich is the dumbest damn take since some jackass tried drinking soup with a fork."
+    : "Example (different topic): Calling a hot dog a sandwich is the dumbest take since someone tried drinking soup with a fork.";
   return "\n\nThis is a savage ROAST BATTLE about: " + topic + ". " +
-    "In ONE short, mean, funny sentence, trash-talk the OTHER side's dumb take and make your own point — go straight at how bad their argument is. " +
+    "In ONE short, mean, funny sentence, trash-talk the OTHER side's dumb take and make your own point — go straight at how bad their argument is." + foul + " " +
     "PLAIN TEXT ONLY — no quotation marks, no asterisks, no stage directions, no emojis, no labels, no second sentence. " +
-    "Never repeat the topic, these instructions, or your opponent's words. " +
-    "Example (different topic): Calling a hot dog a sandwich is the dumbest take since someone tried drinking soup with a fork.";
+    "Never repeat the topic, these instructions, or your opponent's words. " + example;
 }
 function buildSystemPromptLite(persona, stance, vibe, topic) {
-  return persona.system_prompt + battleRulesLite(topic) + stanceLine(stance) + vibeLine(vibe);
+  return persona.system_prompt + battleRulesLite(topic, vibe) + stanceLine(stance) + vibeLine(vibe);
 }
 
 // On-device conversation: keep it MINIMAL so the tiny model has nothing to echo.
 // Topic + stance live in the system prompt; here we only trigger the turn, and to
 // reply we hand over just the rival's last line wrapped in a hard "don't repeat".
-function buildConversationLite(personaId, history) {
+function buildConversationLite(personaId, history, vibe) {
+  const foul = vibe === "unhinged" ? " Be foul-mouthed and swear." : "";
   let lastOpp = null;
   for (let i = history.length - 1; i >= 0; i--) {
     const turn = history[i];
     if (turn?.persona_id && turn.persona_id !== personaId && typeof turn.content === "string") { lastOpp = turn.content; break; }
   }
-  if (!lastOpp) return [{ role: "user", content: "Open the battle with your most savage trash-talk line:" }];
-  return [{ role: "user", content: `The other side just said: "${lastOpp}". Tear that take apart — fire back ONE savage NEW line that mocks how dumb it is and makes your point:` }];
+  if (!lastOpp) return [{ role: "user", content: "Open the battle with your most savage trash-talk line." + foul }];
+  return [{ role: "user", content: `The other side just said: "${lastOpp}". Tear that take apart — fire back ONE savage NEW line that mocks how dumb it is and makes your point.` + foul }];
 }
 
 // Scrub the quirks tiny models add: stray asterisks, leading stage directions
@@ -2379,7 +2387,7 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     ? buildSystemPromptLite(persona, effStance, b.vibe, b.topic)
     : buildSystemPrompt(persona, stance, b.vibe);
   const convo = onDeviceLite
-    ? buildConversationLite(personaId, b.history)
+    ? buildConversationLite(personaId, b.history, b.vibe)
     : buildConversationFromPOV(personaId, b.topic, b.history);
 
   let tokenSource;
