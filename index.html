@@ -1955,6 +1955,29 @@ function buildSystemPrompt(persona, stance, vibe) {
   return persona.system_prompt + BATTLE_RULES + stanceLine(stance) + vibeLine(vibe);
 }
 
+// Tiny on-device models choke on the full rulebook (they take the *italics*,
+// **bold**, [gif:] and emoji rules literally and spit out garbage). Give them a
+// stripped-down prompt: just one short, plain-text, savage line.
+const BATTLE_RULES_LITE =
+  "\n\nYou are in a savage text roast battle about the topic. Reply with EXACTLY ONE short sentence (under 15 words) that roasts your opponent while arguing your side. " +
+  "Be brutal, funny, and clear. PLAIN TEXT ONLY — no quotation marks, no asterisks, no stage directions, no emojis, no labels, no second sentence. Just the one-line burn.";
+function buildSystemPromptLite(persona, stance, vibe) {
+  return persona.system_prompt + BATTLE_RULES_LITE + stanceLine(stance) + vibeLine(vibe);
+}
+
+// Scrub the quirks tiny models add: stray asterisks, leading stage directions
+// (*cold stare*), wrapping quotes, and meta labels ("Here's my line:").
+function cleanOnDeviceText(t) {
+  const orig = (t || "").replace(/\s+/g, " ").trim();
+  let s = orig;
+  s = s.replace(/^[*([][^*)\]\n]{0,40}[*)\]]\s*/, "");                                  // leading *stage direction*
+  s = s.replace(/^(okay|sure|alright|well|here'?s (my )?(opening )?(line|roast|response|comeback)|my (opening |first )?(line|roast)|response|opening line)\s*[:,]\s*/i, ""); // meta label
+  s = s.replace(/^["'“‘]+\s*/, "").replace(/\s*["'”’]+$/, "");                           // wrapping quotes
+  s = s.replace(/\*+/g, "").trim();                                                       // stray asterisks (no markdown on-device)
+  // Never strip a real answer down to nothing — fall back to the original (de-starred).
+  return s.length >= 2 ? s : orig.replace(/\*+/g, "").trim();
+}
+
 function buildConversationFromPOV(personaId, topic, history) {
   const messages = [];
   for (const turn of history) {
@@ -2243,14 +2266,22 @@ async function* streamWebLLM(systemPrompt, messages, signal, onProgress) {
   if (signal?.aborted) return;
   const chat = [{ role: "system", content: systemPrompt }, ...messages];
   let chunks;
-  // On-device models are chattier than the cloud ones — give them a little more
-  // room so a roast finishes its thought instead of getting cut off mid-word.
-  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 72, temperature: 0.9, messages: chat }); }
+  // Tiny on-device models ramble and get incoherent at high temperature, so keep
+  // it low and the cap short. We also STOP at the first finished sentence below so
+  // the message stays one short line like a real text battle.
+  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 56, temperature: 0.6, messages: chat }); }
   catch (e) { throw new Error(`On-Device AI — ${e.message || e}`); }
+  let acc = "", stopped = false;
   for await (const c of chunks) {
     if (signal?.aborted) { try { await engine.interruptGenerate(); } catch {} break; }
     const t = c?.choices?.[0]?.delta?.content;
-    if (t) yield t;
+    if (!t) continue;
+    if (stopped) continue;   // already have our one sentence — let the stream finish quietly
+    acc += t;
+    yield t;
+    // One sentence is enough: stop YIELDING once the first one closes, but keep
+    // draining so the engine finishes cleanly and the NEXT turn isn't left hanging.
+    if (acc.trim().length > 15 && /[.!?…]["')’”]?\s*$/.test(acc)) stopped = true;
   }
 }
 // Pre-download the on-device model from Settings (so the first battle isn't a wait).
@@ -2282,7 +2313,10 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const targetTypingMs = TYPING_MIN_MS + Math.random() * TYPING_VAR_MS;
   const persona = personas[personaId];
   if (!persona) throw new Error(`Unknown persona: ${personaId}`);
-  const systemPrompt = buildSystemPrompt(persona, stance, b.vibe);
+  // In-browser tiny models get the stripped-down prompt; cloud/Nano get the full one.
+  const systemPrompt = isInBrowser(modelDef?.provider)
+    ? buildSystemPromptLite(persona, stance, b.vibe)
+    : buildSystemPrompt(persona, stance, b.vibe);
   const convo = buildConversationFromPOV(personaId, b.topic, b.history);
   const side = typingEl.classList.contains("right") ? "right" : "left";
 
@@ -2344,9 +2378,14 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   if (renderInterval) { clearInterval(renderInterval); renderInterval = null; }
   b.abort = null;
 
+  // Tidy up tiny on-device models' quirks (stray asterisks, quotes, meta) before
+  // the final render — and store the cleaned text so history stays clean too.
+  let finalText = renderedText;
+  if (isInBrowser(modelDef?.provider) && finalText) finalText = cleanOnDeviceText(finalText);
+
   // Final render: markdown + GIFs (GIFs become their own follow-up bubble)
-  if (bubbleEl && renderedText) renderRichBubble(bubbleEl, renderedText, side, persona);
-  return renderedText;
+  if (bubbleEl && finalText) renderRichBubble(bubbleEl, finalText, side, persona);
+  return finalText;
 }
 
 // ─── Rich rendering: markdown (*italic* **bold**) + GIFs ─────────────
