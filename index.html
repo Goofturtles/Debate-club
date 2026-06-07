@@ -432,12 +432,29 @@
 
   .settings-link {
     display: block; text-align: center; width: 100%;
-    margin-top: var(--s-4);
-    background: none; border: none; cursor: pointer;
-    color: var(--text-3); font-family: inherit; font-size: 13px; font-weight: 500;
-    transition: color 0.18s var(--ease-std);
+    margin-top: var(--s-4); padding: 11px 14px;
+    background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.30);
+    border-radius: var(--r-md); cursor: pointer; font-family: inherit;
+    transition: background 0.18s var(--ease-std), border-color 0.18s var(--ease-std), box-shadow 0.3s var(--ease-std);
   }
-  .settings-link:hover { color: var(--text-2); }
+  .settings-link:hover { background: rgba(99,102,241,0.14); border-color: rgba(99,102,241,0.52); }
+  .settings-cta-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .settings-cta-title { color: var(--text); font-size: 14px; font-weight: 600; }
+  .settings-cta-pill {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+    color: #04121f; background: var(--good); padding: 1px 7px; border-radius: 980px;
+  }
+  .settings-cta-sub { display: block; margin-top: 3px; color: var(--text-3); font-size: 12px; line-height: 1.4; }
+  .settings-link.pulse { border-color: rgba(99,102,241,0.6); animation: settingsPulse 1.9s ease-in-out infinite; }
+  @keyframes settingsPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.0); }
+    50%      { box-shadow: 0 0 0 7px rgba(99,102,241,0.13); }
+  }
+  .settings-hint {
+    margin: 8px auto 0; max-width: 30rem; text-align: center;
+    font-size: 12.5px; line-height: 1.45; color: #a5b4fc;
+  }
+  @media (prefers-reduced-motion: reduce) { .settings-link.pulse { animation: none; } }
 
   .err {
     display: none;
@@ -781,6 +798,26 @@
   .on-device-status:empty { display: none; }
   .on-device-status.ok  { color: var(--good); }
   .on-device-status.err { color: #fca5a5; }
+  .key-intro { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+  .key-block--recommended { padding: 12px 14px; border: 1px solid rgba(52,211,153,0.40); background: rgba(52,211,153,0.07); border-radius: var(--r-sm); }
+  .rec-badge {
+    display: inline-block; vertical-align: 1px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em;
+    color: #fff; background: var(--accent); padding: 1px 7px; border-radius: 980px; margin-left: 4px;
+  }
+  .adv-badge {
+    display: inline-block; vertical-align: 1px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--text-2); background: rgba(255,255,255,0.08); padding: 1px 7px; border-radius: 980px; margin-left: 4px;
+  }
+  .key-get { font-size: 12.5px; white-space: nowrap; }
+  .key-get--primary {
+    background: var(--good); color: #04121f; font-weight: 700;
+    padding: 5px 11px; border-radius: 980px; text-decoration: none;
+  }
+  .key-get--primary:hover { filter: brightness(1.08); text-decoration: none; }
+  .on-device-block--advanced { border-color: rgba(192,132,252,0.22); background: rgba(192,132,252,0.05); opacity: 0.92; }
+  .dl-progress { color: var(--text-2); font-style: italic; }
 
   footer {
     text-align: center; color: var(--text-3);
@@ -823,8 +860,8 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    Add a key to start &mdash; a <strong>free Google Gemini key</strong> works on any phone.
-    <a href="#" id="banner-settings-link">Open Settings →</a>
+    Free to play, no payment &mdash; grab a <strong>free Gemini key</strong> (no card) or use <strong>no-key On-Device AI</strong>.
+    <a href="#" id="banner-settings-link">Set up →</a>
   </div>
 
   <!-- SETUP -->
@@ -924,7 +961,14 @@
 
     <button id="fight" class="btn btn--primary fight-cta">Start the Battle</button>
     <div id="setup-err" class="err"></div>
-    <button class="settings-link" id="open-settings" type="button">API key settings</button>
+    <button class="settings-link" id="open-settings" type="button">
+      <span class="settings-cta-row">
+        <span class="settings-cta-title">⚙&nbsp; Set up your free AI</span>
+        <span class="settings-cta-pill">NO PAYMENT</span>
+      </span>
+      <span class="settings-cta-sub">Free Gemini key (~30 sec) or no-key On-Device AI — works on every phone</span>
+    </button>
+    <p class="settings-hint" id="settings-hint" hidden>👋 New here? Tap above to turn on free AI — no credit card, ~30 seconds.</p>
   </section>
 
   <!-- MATCH -->
@@ -1126,11 +1170,15 @@ function setKey(provider, value) {
   } catch {}
 }
 function isOnDevice(provider) { return providers[provider]?.onDevice === true; }
-function anyKeySet() { return Object.keys(providers).some((p) => isOnDevice(p) || getKey(p)); }
+// On-device/keyless providers are always "available", so for the first-run nudge
+// we only care whether a cloud key (the default Gemini path) has been entered.
+function hasAnyCloudKey() { return ["google", "anthropic", "openai"].some((p) => !!getKey(p)); }
+function isInBrowser(provider) { return providers[provider]?.inBrowser === true; }
 function keyForModel(modelId) {
   const def = models[modelId];
   if (!def) return "";
   if (isOnDevice(def.provider)) return "on-device";
+  if (providers[def.provider]?.keyless) return "keyless";   // on-device WebGPU — no key needed
   return getKey(def.provider);
 }
 
@@ -1254,10 +1302,19 @@ function buildCustomSelect(rootEl, options, initialValue, onChange) {
 const personaOptions = Object.entries(personas).map(([id, p]) => ({ value: id, label: p.name, avatar: p.avatar }));
 const modelOptions = Object.entries(models).map(([id, m]) => ({ value: id, label: m.label, color: providers[m.provider].color, trailing: m.tier }));
 
+// Default to a model that just works for THIS visitor: their own key if they
+// have one, otherwise the free Gemini path (the highlighted, works-on-every-phone
+// option). Never default to Chrome AI / Nano — it silently fails on phones.
+function pickDefaultModel() {
+  if (getKey("google")) return "gemini-2-5-flash-lite";
+  if (getKey("anthropic")) return "claude-haiku-4-5";
+  if (getKey("openai")) return "gpt-4o-mini";
+  return "gemini-2-5-flash-lite";
+}
 const personaA = buildCustomSelect($("persona-a"), personaOptions, personaIds[0], (id) => refreshEmoji("a", id));
 const personaB = buildCustomSelect($("persona-b"), personaOptions, personaIds[1], (id) => refreshEmoji("b", id));
-const dropdownA = buildCustomSelect($("model-a"), modelOptions, modelIds[0], () => refreshAllKeyPills());
-const dropdownB = buildCustomSelect($("model-b"), modelOptions, modelIds[0], () => refreshAllKeyPills());
+const dropdownA = buildCustomSelect($("model-a"), modelOptions, pickDefaultModel(), () => refreshAllKeyPills());
+const dropdownB = buildCustomSelect($("model-b"), modelOptions, pickDefaultModel(), () => refreshAllKeyPills());
 
 // ─── Segmented controls (stance / rounds / vibe) ─────────────────────
 function buildSegmented(rootEl) {
@@ -1316,7 +1373,7 @@ function refreshKeyPill(pillEl, modelId) {
   if (!def) return;
   const provider = providers[def.provider];
   pillEl.classList.remove("missing", "on-device");
-  if (isOnDevice(def.provider)) { pillEl.textContent = "On device · no key"; pillEl.classList.add("on-device"); return; }
+  if (isOnDevice(def.provider) || provider.keyless) { pillEl.textContent = "On device · no key"; pillEl.classList.add("on-device"); return; }
   const hasKey = !!getKey(def.provider);
   pillEl.textContent = hasKey ? `${provider.label} key` : `${provider.label} key needed`;
   pillEl.classList.toggle("missing", !hasKey);
@@ -1326,41 +1383,37 @@ $("key-pill-b").addEventListener("click", openSettings);
 function refreshAllKeyPills() {
   refreshKeyPill($("key-pill-a"), dropdownA.getValue());
   refreshKeyPill($("key-pill-b"), dropdownB.getValue());
-  $("no-keys-banner").classList.toggle("active", !anyKeySet());
+  let seen = false; try { seen = localStorage.getItem("aidebate.seenSetup") === "1"; } catch {}
+  $("no-keys-banner").classList.toggle("active", !hasAnyCloudKey() && !seen);
 }
 
 // ─── Settings modal ──────────────────────────────────────────────────
 function buildKeyBlocks() {
   const container = $("key-blocks");
   container.innerHTML = "";
-  const onDeviceProvider = Object.entries(providers).find(([, p]) => p.onDevice);
-  if (onDeviceProvider) {
-    const [, p] = onDeviceProvider;
-    const info = document.createElement("div");
-    info.className = "key-block on-device-block";
-    info.innerHTML = `
-      <div class="key-block-head">
-        <h3 class="field-label on-device-heading">${p.name} · ${p.label}</h3>
-        <a href="${p.keyHelpUrl}" target="_blank" rel="noopener">Learn more ↗</a>
-      </div>
-      <p class="on-device-note">Runs entirely in your browser using Chrome's built-in Gemini Nano. No key, no cost. <strong>Desktop Chrome 138+ only</strong> (needs the Prompt API flag) — it does not work on phones. <strong>On a phone? Use the free Google · Gemini key below.</strong></p>
-      <button class="btn btn--small btn--secondary on-device-dl" id="on-device-download" type="button">Check / download Chrome AI</button>
-      <div class="on-device-status" id="on-device-status" role="status" aria-live="polite"></div>`;
-    container.appendChild(info);
-    info.querySelector("#on-device-download").addEventListener("click", () => {
-      downloadOnDevice(info.querySelector("#on-device-status"), info.querySelector("#on-device-download"));
-    });
-  }
+
+  const intro = document.createElement("p");
+  intro.className = "key-intro";
+  intro.innerHTML = "Two free ways to roast, no payment either way: grab a <strong>free Google&nbsp;Gemini key</strong> (about 30 seconds, no credit card, works on every phone) or run <strong>On-Device AI</strong> with no key at all. Add a Claude or GPT key only if you want those.";
+  container.appendChild(intro);
+
+  // Provider order in models.js drives this: Gemini (free, recommended) first,
+  // then On-Device (no key), then paid keys, then Chrome AI Nano (advanced).
   for (const [provId, p] of Object.entries(providers)) {
-    if (p.onDevice) continue;
+    if (p.onDevice) { container.appendChild(buildNanoBlock()); continue; }
+    if (p.keyless || p.inBrowser) { container.appendChild(buildWebLLMBlock()); continue; }
+    container.appendChild(buildCloudKeyBlock(provId, p));
+  }
+
+  function buildCloudKeyBlock(provId, p) {
     const block = document.createElement("div");
-    block.className = "key-block";
+    block.className = "key-block" + (p.recommended ? " key-block--recommended" : "");
     block.innerHTML = `
       <div class="key-block-head">
-        <label class="field-label" for="key-input-${provId}">${p.name} · ${p.label}${p.free ? ' <span class="free-badge">FREE</span>' : ''}</label>
-        <a href="${p.keyHelpUrl}" target="_blank" rel="noopener">Get a key ↗</a>
+        <label class="field-label" for="key-input-${provId}">${p.name} · ${p.label}${p.recommended ? ' <span class="rec-badge">Easiest</span>' : ''}${p.free ? ' <span class="free-badge">FREE</span>' : ''}</label>
+        <a class="key-get${p.recommended ? ' key-get--primary' : ''}" href="${p.keyHelpUrl}" target="_blank" rel="noopener">${p.free ? 'Get a free key ↗' : 'Get a key ↗'}</a>
       </div>
-      ${p.free ? '<p class="free-note">Free tier, no credit card — works on phones. Best free pick if you\'re not on desktop Chrome.</p>' : ''}
+      ${p.free ? '<p class="free-note">No credit card. Tap <strong>Get a free key</strong> → sign in → <strong>Create API key</strong> → paste it below. ~1,000 rounds a day, free.</p>' : ''}
       <div class="key-input-row">
         <input id="key-input-${provId}" class="key-input" type="text" inputmode="text"
                placeholder="${p.envVar === 'ANTHROPIC_API_KEY' ? 'sk-ant-...' : p.envVar === 'OPENAI_API_KEY' ? 'sk-...' : 'AIza...'}"
@@ -1368,7 +1421,6 @@ function buildKeyBlocks() {
         <span class="key-status" id="key-status-${provId}"></span>
       </div>
       <button class="key-clear" type="button" data-clear="${provId}">Clear key</button>`;
-    container.appendChild(block);
     const input = block.querySelector(`#key-input-${provId}`);
     const status = block.querySelector(`#key-status-${provId}`);
     const clearBtn = block.querySelector(`[data-clear="${provId}"]`);
@@ -1384,10 +1436,66 @@ function buildKeyBlocks() {
       input.value = ""; setKey(provId, ""); status.textContent = ""; status.classList.remove("set");
       refreshAllKeyPills();
     });
+    return block;
+  }
+
+  function buildWebLLMBlock() {
+    const block = document.createElement("div");
+    block.className = "key-block on-device-block";
+    block.innerHTML = `
+      <div class="key-block-head">
+        <h3 class="field-label on-device-heading">On-Device AI <span class="free-badge">NO KEY</span></h3>
+      </div>
+      <p class="on-device-note">Runs free right in your browser on your device's GPU — no key, no limits, nothing leaves your device. Uses <strong>Gemma-2-2B</strong> on desktop and capable phones; older phones automatically drop to a lighter model so it still works. First use downloads it once (Gemma-2-2B is ~1.4&nbsp;GB), then it's cached. Needs WebGPU — works on most 2024+ Android phones, iPhones on iOS&nbsp;26+, and any modern desktop browser.</p>
+      <button class="btn btn--small btn--secondary on-device-dl" id="webllm-download" type="button">Download / enable On-Device AI</button>
+      <div class="on-device-status" id="webllm-status" role="status" aria-live="polite"></div>`;
+    block.querySelector("#webllm-download").addEventListener("click", () => {
+      downloadWebLLM(block.querySelector("#webllm-status"), block.querySelector("#webllm-download"));
+    });
+    return block;
+  }
+
+  function buildNanoBlock() {
+    const p = providers.browser;
+    const block = document.createElement("div");
+    block.className = "key-block on-device-block on-device-block--advanced";
+    block.innerHTML = `
+      <div class="key-block-head">
+        <h3 class="field-label on-device-heading">${p.name} · ${p.label} <span class="adv-badge">Advanced</span></h3>
+        <a href="${p.keyHelpUrl}" target="_blank" rel="noopener">Learn more ↗</a>
+      </div>
+      <p class="on-device-note">Chrome's built-in Gemini Nano. <strong>Desktop Chrome 138+ only</strong> (needs the Prompt API flag) — does not work on phones. Most people should use On-Device AI above instead.</p>
+      <button class="btn btn--small btn--secondary on-device-dl" id="on-device-download" type="button">Check / download Chrome AI</button>
+      <div class="on-device-status" id="on-device-status" role="status" aria-live="polite"></div>`;
+    block.querySelector("#on-device-download").addEventListener("click", () => {
+      downloadOnDevice(block.querySelector("#on-device-status"), block.querySelector("#on-device-download"));
+    });
+    return block;
   }
 }
 let __lastFocusBeforeModal = null;
+// First-time highlight: pulse the Settings button + show a hint until the
+// visitor has opened Settings once (or already has a key set).
+function dismissSetupHint() {
+  try { localStorage.setItem("aidebate.seenSetup", "1"); } catch {}
+  $("open-settings")?.classList.remove("pulse");
+  const hint = $("settings-hint"); if (hint) hint.hidden = true;
+}
+function maybeShowSetupHint() {
+  let seen = false;
+  try { seen = localStorage.getItem("aidebate.seenSetup") === "1"; } catch {}
+  if (seen || hasAnyCloudKey()) return;   // returning visitor or already set up — no nag
+  $("open-settings")?.classList.add("pulse");
+  const hint = $("settings-hint"); if (hint) hint.hidden = false;
+}
+// Called when the user tries to battle without any AI selected — point them at Settings.
+function promptSetup(msg) {
+  showErr(msg);
+  $("open-settings")?.classList.add("pulse");
+  const hint = $("settings-hint"); if (hint) hint.hidden = false;
+}
 function openSettings() {
+  dismissSetupHint();
   __lastFocusBeforeModal = document.activeElement;
   buildKeyBlocks();
   const overlay = $("settings-overlay");
@@ -1419,6 +1527,7 @@ $("winner-overlay").addEventListener("click", (e) => {
   if (e.target === $("winner-overlay")) resetToSetup();
 });
 refreshAllKeyPills();
+maybeShowSetupHint();
 
 // ─── Battle ──────────────────────────────────────────────────────────
 let battle = null;
@@ -1491,11 +1600,11 @@ function validateSetup() {
     const need = new Set();
     if (!keyForModel(modelAId)) need.add(providers[models[modelAId].provider].name);
     if (!keyForModel(modelBId)) need.add(providers[models[modelBId].provider].name);
-    if (need.size) { showErr(`Missing API key for ${[...need].join(" and ")}. Open Settings to add one.`); return null; }
+    if (need.size) { promptSetup(`Turn on free AI first — tap "Set up your free AI" below (free Gemini key, or no-key On-Device AI).`); return null; }
     return { topic, aId, bId, modelAId, modelBId };
   } else {
     if (!keyForModel(modelAId)) {
-      showErr(`Missing API key for ${providers[models[modelAId].provider].name}. Open Settings to add one.`);
+      promptSetup(`Turn on free AI first — tap "Set up your free AI" below (free Gemini key, or no-key On-Device AI).`);
       return null;
     }
     return { topic, aId, modelAId };
@@ -1649,7 +1758,9 @@ async function aiTurn(b) {
     return;
   }
   // The user may have ended the battle while this turn was streaming.
-  if (b.stopped || battle !== b) { b.busy = false; return; }
+  // If nothing was rendered (e.g. stopped during the on-device model download),
+  // drop the dangling typing/progress bubble so it doesn't linger.
+  if (b.stopped || battle !== b) { if (!text.trim()) typingEl.remove(); b.busy = false; return; }
   if (text.trim()) b.history.push({ persona_id: b.leftId, content: text.trim() });
   else { typingEl.remove(); appendSystemMessage("(silence) — check your API key."); }
   b.busy = false;
@@ -2010,6 +2121,96 @@ async function* streamOnDevice(systemPrompt, messages, signal) {
   } finally { try { session.destroy?.(); } catch {} }
 }
 
+// ─── On-device via WebGPU (WebLLM) — no key, runs in the browser ──────
+// Desktop gets the bigger, better Gemma-2-2B; phones get an optimized 4-bit
+// Llama-3.2-1B (~0.9GB) that actually fits in mobile GPU memory. Both run
+// fully on the device — no key, no server, no per-request cost or limit.
+const WEBLLM_CDN = "https://esm.run/@mlc-ai/web-llm";
+function isMobileLike() {
+  try { return matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
+  catch { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
+}
+// Which on-device model(s) to try, best-first. Desktop and capable phones get
+// Gemma-2-2B (better roasts). Phones that can't fit the 2B model in GPU memory
+// automatically fall back to an optimized 4-bit Llama-3.2-1B, so On-Device AI
+// still works on the widest range of phones.
+function pickWebLLMModelChain() {
+  const GEMMA = "gemma-2-2b-it-q4f16_1-MLC";
+  const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+  if (!isMobileLike()) return [GEMMA];
+  const mem = navigator.deviceMemory || 0;   // GB, coarse; undefined on iOS → 0
+  if (mem && mem < 4) return [LLAMA];         // clearly low-RAM phone — skip the heavy model
+  return [GEMMA, LLAMA];                       // try Gemma-2-2B first, fall back if it can't load
+}
+const __webllm = { mod: null, engine: null, modelId: null, loading: null };
+// Build (or reuse) the engine for this device's model. onProgress(pct, text)
+// fires during the one-time model download. Cached in-browser after first load.
+async function getWebLLMEngine(onProgress) {
+  if (typeof navigator === "undefined" || !navigator.gpu) {
+    throw new Error("On-Device AI needs WebGPU, which this browser/device doesn't support yet. Add a free Gemini key in Settings — it works on every phone.");
+  }
+  const chain = pickWebLLMModelChain();
+  if (__webllm.engine && chain.includes(__webllm.modelId)) return __webllm.engine;
+  if (__webllm.loading) return __webllm.loading;
+  __webllm.loading = (async () => {
+    let mod;
+    try { mod = __webllm.mod || (__webllm.mod = await import(WEBLLM_CDN)); }
+    catch (e) { throw new Error("Couldn't load the on-device AI engine (network blocked?). Add a free Gemini key in Settings instead."); }
+    let lastErr;
+    for (let i = 0; i < chain.length; i++) {
+      const id = chain[i], isFallback = i > 0;
+      try {
+        const engine = await mod.CreateMLCEngine(id, {
+          initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback); } catch {} }
+        });
+        __webllm.engine = engine; __webllm.modelId = id;
+        return engine;
+      } catch (e) {
+        lastErr = e;
+        try { console.warn("On-device model couldn't load, trying a smaller one:", id, e); } catch {}
+        // fall through to the next (smaller) model in the chain
+      }
+    }
+    throw new Error(`On-Device AI couldn't load on this device — likely not enough memory. Add a free Gemini key in Settings; it works on every phone. (${lastErr?.message || lastErr})`);
+  })();
+  try { return await __webllm.loading; }
+  finally { __webllm.loading = null; }
+}
+async function* streamWebLLM(systemPrompt, messages, signal, onProgress) {
+  const engine = await getWebLLMEngine(onProgress);
+  if (signal?.aborted) return;
+  const chat = [{ role: "system", content: systemPrompt }, ...messages];
+  let chunks;
+  // On-device models are chattier than the cloud ones — give them a little more
+  // room so a roast finishes its thought instead of getting cut off mid-word.
+  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 72, temperature: 0.9, messages: chat }); }
+  catch (e) { throw new Error(`On-Device AI — ${e.message || e}`); }
+  for await (const c of chunks) {
+    if (signal?.aborted) { try { await engine.interruptGenerate(); } catch {} break; }
+    const t = c?.choices?.[0]?.delta?.content;
+    if (t) yield t;
+  }
+}
+// Pre-download the on-device model from Settings (so the first battle isn't a wait).
+async function downloadWebLLM(statusEl, btn) {
+  const set = (msg, kind) => { statusEl.textContent = msg; statusEl.className = "on-device-status" + (kind ? " " + kind : ""); };
+  if (typeof navigator === "undefined" || !navigator.gpu) {
+    set("This browser/device doesn't support WebGPU, so on-device AI can't run here. Use the free Gemini key above — it works on every phone.", "err");
+    return;
+  }
+  if (btn) btn.disabled = true;
+  set(`Downloading Gemma-2-2B (~1.4 GB)… first time only, then it's cached on this device. Can take a minute.`);
+  try {
+    await getWebLLMEngine((pct, text, isFallback) => set(pct >= 100 ? "Compiling… almost ready." : `Downloading ${isFallback ? "a lighter model for this device" : "on-device AI"}… ${pct}%`));
+    set("✓ On-device AI is ready — no key needed, and cached so it's instant next time.", "ok");
+    refreshAllKeyPills();
+  } catch (e) {
+    set(humanizeError(e), "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ─── streamTurn ──────────────────────────────────────────────────────
 async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const controller = new AbortController();
@@ -2026,13 +2227,23 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   let tokenSource;
   if (isOnDeviceModel) {
     tokenSource = streamOnDevice(systemPrompt, convo, controller.signal);
+  } else if (isInBrowser(modelDef.provider)) {
+    // On-device WebGPU model — first turn may download the model; show progress
+    // in the typing bubble so it doesn't look frozen.
+    tokenSource = streamWebLLM(systemPrompt, convo, controller.signal, (pct, text, isFallback) => {
+      const bubble = typingEl.querySelector(".bubble");
+      if (!bubble) return;
+      bubble.classList.add("dl-progress");
+      const what = isFallback ? "a lighter model for this device" : "on-device AI";
+      bubble.textContent = pct >= 100 ? "Warming up the model…" : `Downloading ${what}… ${pct}%`;
+    });
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
   }
 
   let bubbleEl = null, renderedText = "", pendingText = "", streamDone = false, renderInterval = null;
-  function ensureBubble() { if (bubbleEl) return; bubbleEl = typingEl.querySelector(".bubble"); bubbleEl.innerHTML = ""; }
+  function ensureBubble() { if (bubbleEl) return; bubbleEl = typingEl.querySelector(".bubble"); bubbleEl.classList.remove("dl-progress"); bubbleEl.innerHTML = ""; }
   function startRenderLoop() {
     if (renderInterval) return;
     renderInterval = setInterval(() => {

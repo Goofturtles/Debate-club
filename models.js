@@ -1,12 +1,35 @@
 // Model registry. Add or remove entries to expand the showdown.
 
 export const models = {
-  // On-device / no-key option first so it's the default for new visitors
-  "on-device": {
-    provider: "browser",
-    model: "gemini-nano",
-    label: "Chrome AI",
-    tier: "device"
+  // ── Recommended: free, works on EVERY phone (cheapest live Gemini Flash) ──
+  // gemini-2.5-flash-lite is the cheapest model still alive (2.0-flash-lite and
+  // 1.5-flash-8b were shut down). Free tier: 15 req/min, 1000/day, no card.
+  "gemini-2-5-flash-lite": {
+    provider: "google",
+    model: "gemini-2.5-flash-lite",
+    label: "Gemini",
+    tier: "free"
+  },
+  // ── No key at all — runs in the browser on the device's GPU (WebGPU) ──
+  // Actual model is chosen at runtime by device: Gemma-2-2B on desktop, an
+  // optimized 4-bit Llama-3.2-1B on phones so it actually fits in memory.
+  "on-device-webllm": {
+    provider: "webllm",
+    model: "auto",
+    label: "On-Device",
+    tier: "no key"
+  },
+  "gemini-2-5-flash": {
+    provider: "google",
+    model: "gemini-2.5-flash",
+    label: "Gemini",
+    tier: "fast"
+  },
+  "gemini-2-5-pro": {
+    provider: "google",
+    model: "gemini-2.5-pro",
+    label: "Gemini",
+    tier: "smart"
   },
   "claude-haiku-4-5": {
     provider: "anthropic",
@@ -32,28 +55,33 @@ export const models = {
     label: "GPT",
     tier: "smart"
   },
-  "gemini-2-5-flash": {
-    provider: "google",
-    model: "gemini-2.5-flash",
-    label: "Gemini",
-    tier: "fast"
-  },
-  "gemini-2-5-pro": {
-    provider: "google",
-    model: "gemini-2.5-pro",
-    label: "Gemini",
-    tier: "smart"
+  // Chrome's built-in Gemini Nano (desktop Chrome 138+ with the Prompt API flag).
+  "on-device": {
+    provider: "browser",
+    model: "gemini-nano",
+    label: "Chrome AI",
+    tier: "device"
   }
 };
 
 export const providers = {
-  browser: {
-    name: "Chrome",
-    label: "Chrome AI",
-    color: "#a78bfa",        // soft violet — distinct from cloud providers
-    keyHelpUrl: "https://developer.chrome.com/docs/ai/prompt-api",
-    envVar: null,            // no API key — runs entirely on-device
-    onDevice: true
+  google: {
+    name: "Google",
+    label: "Gemini",
+    color: "#4285f4",
+    keyHelpUrl: "https://aistudio.google.com/apikey",
+    envVar: "GOOGLE_API_KEY",
+    free: true,          // genuinely free tier, no credit card — works on phones
+    recommended: true    // the easiest path that works on every device
+  },
+  webllm: {
+    name: "On-Device",
+    label: "On-Device",
+    color: "#a78bfa",    // soft violet — no key, runs locally
+    keyHelpUrl: null,
+    envVar: null,
+    keyless: true,       // no API key — runs entirely in the browser (WebGPU)
+    inBrowser: true
   },
   anthropic: {
     name: "Anthropic",
@@ -69,12 +97,12 @@ export const providers = {
     keyHelpUrl: "https://platform.openai.com/api-keys",
     envVar: "OPENAI_API_KEY"
   },
-  google: {
-    name: "Google",
-    label: "Gemini",
-    color: "#4285f4",
-    keyHelpUrl: "https://aistudio.google.com/apikey",
-    envVar: "GOOGLE_API_KEY",
-    free: true   // Google AI Studio has a genuinely free tier (no credit card) — works on phones
+  browser: {
+    name: "Chrome",
+    label: "Chrome AI",
+    color: "#c084fc",        // brighter violet — distinct from the WebGPU on-device option
+    keyHelpUrl: "https://developer.chrome.com/docs/ai/prompt-api",
+    envVar: null,            // no API key — runs entirely on-device
+    onDevice: true
   }
 };
