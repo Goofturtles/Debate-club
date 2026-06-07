@@ -2040,14 +2040,22 @@ const RE = {
     "someone put ketchup in a coffee maker",
     "a flat-earther bought a globe"
   ],
-  swear: ["fuck", "what the fuck", "holy shit", "fucking hell", "goddamn", "shit", "for fuck's sake", "oh hell no", "Jesus fucking christ", "fuck me", "damn"],
+  // sensible swear leads (no self-directed "fuck me" — that read as nonsense)
+  swear: ["fuck", "shit", "goddamn", "holy shit", "what the fuck", "oh hell no", "for fuck's sake", "fucking hell", "damn", "hell"],
   ender: ["Sit the fuck down.", "Fucking embarrassing.", "Absolute clown shit.", "Get bent.", "Cry about it.", "Eat shit.", "Hang it the fuck up."],
+  // Each persona has its OWN voice (open) AND a set of jabs at THAT character, so a
+  // fighter roasts the OPPONENT's persona (Sherlock mocks Joe Rogan's podcast, etc.).
   persona: {
-    sherlock:    ["Elementary —", "Predictable.", "I solved you already:", "Obvious, really:"],
-    rogan:       ["Bro,", "Man,", "Listen, dude —", "That's wild —"],
-    stoic:       ["Pitiful.", "Stay mad.", "How much you care is adorable.", "Unbothered, as always:"],
-    infomercial: ["FOLKS,", "BUT WAIT —", "ACT NOW:", "BREAKING:"]
+    rogan:       { open: ["Bro,", "Listen man,", "Dude,", "Okay check this out —", "Yo,"],
+                   mock: ["your whole personality is a podcast and an ice bath", "you'd credit DMT for a coin flip", "Jamie couldn't pull up one good take from you", "you talk for three hours and say absolutely nothing", "you think a sauna counts as a personality", "you'd interview a sandwich for ninety minutes"] },
+    sherlock:    { open: ["Elementary —", "Predictable.", "I deduced this already:", "Observe:", "Obvious, really:"],
+                   mock: ["you 'deduce' everything except why nobody invites you out", "you talk like a Victorian who huffed too much pipe smoke", "you solved every case except your own personality", "your idea of fun is a magnifying glass and pure contempt", "you'd call a coin flip a thrilling deduction"] },
+    stoic:       { open: ["Unbothered —", "Pitiful.", "Calm yourself.", "How predictable:", "Stay mad."],
+                   mock: ["you're not 'unbothered', you're just boring", "Marcus Aurelius would have blocked you", "your whole vibe is a fortune cookie that gave up", "you call being emotionally constipated wisdom", "you meditate just to avoid your own takes"] },
+    infomercial: { open: ["FOLKS,", "BUT WAIT —", "ACT NOW:", "BREAKING:", "ATTENTION:"],
+                   mock: ["you're a 2am infomercial nobody ordered", "you'd sell a screen door for a submarine", "your personality has a limited-time offer", "everything about you is batteries-not-included", "you're 40% off and still overpriced"] }
   },
+  mockGeneric: ["your whole personality is a participation trophy", "you argue like you left your brain in the car", "you've got the debate skills of a wet sock", "your takes belong in a lost-and-found", "you'd lose an argument to a voicemail"],
   replyOpen: ["Nice try, but", "Cute. Anyway,", "You really said that?", "Adorable cope —", "Sit down —", "Swing and a miss —", "Bless your heart,", "Oh, you're still talking?"],
   // template(topic, opp, noun, adj, since, an) → roast body  (`an` = "a"/"an" for noun)
   body: [
@@ -2071,25 +2079,13 @@ const RE = {
   ],
   // side-arguing bodies — the fighter actually CHAMPIONS its side and trashes the
   // opponent's. c = my side, x = opponent's side (for "X vs Y" topics).
-  sideAB: [
-    (c, x, o, n, a, an) => `it's ${c}, not ${x} — anyone riding for ${x} is ${an} ${n}, you especially, ${o}.`,
-    (c, x, o, n, a, an) => `${reCap(x)} over ${c}? That's the ${a} take alive, ${o}. Team ${c}, always.`,
-    (c, x, o, n, a, an) => `team ${c} all day — ${x} is for ${a} ${n}s like you, ${o}.`,
-    (c, x, o, n, a, an) => `you really die on the ${x} hill? ${reCap(c)} wins and you know it, ${o}, you ${n}.`,
-    (c, x, o, n, a, an) => `${reCap(c)} stomps ${x} every time. Picking ${x} makes you ${an} ${a} ${n}, ${o}.`
-  ],
-  // yes/no topics — yes = this fighter's answer (boolean), t = the question.
-  sideYN: [
-    (yes, t, o, n, a, an) => `the answer to "${t}" is ${yes ? "YES" : "NO"}, ${o} — only ${an} ${n} argues ${yes ? "no" : "yes"}.`,
-    (yes, t, o, n, a, an) => `${yes ? "obviously yes" : "obviously not"}, ${o}. "${t}" isn't even close, and your ${a} take proves you're ${an} ${n}.`,
-    (yes, t, o, n, a, an) => `saying ${yes ? "no" : "yes"} to "${t}"? ${reCap(a)}, ${o}. It's ${yes ? "YES" : "NO"}, you ${n}.`
-  ],
-  // statement topics — pro = this fighter is in favour (boolean), t = the statement.
-  sideST: [
-    (pro, t, o, n, a, an) => pro ? `"${t}" is elite and you're ${an} ${n} for hating on it, ${o}.` : `"${t}"? Absolute garbage — only ${an} ${n} like you defends it, ${o}.`,
-    (pro, t, o, n, a, an) => pro ? `yeah I'm all for "${t}", deal with it — your ${a} take won't change that, ${o}.` : `anyone pro-"${t}" is ${a}. That's you, ${o}, you ${n}.`,
-    (pro, t, o, n, a, an) => pro ? `"${t}" stays winning, and your ${a} hating just makes you ${an} ${n}, ${o}.` : `"${t}" is ${an} ${a} hill to die on, ${o}, and you're dying on it like ${an} ${n}.`
-  ]
+  // SHORT side clauses (one piece of a line) — the fighter states its side. These
+  // get combined with a persona jab so the roast argues AND mocks the opponent.
+  sideClause: {
+    ab: [ (c, x) => `it's ${c}, not ${x}`, (c, x) => `${c} clears ${x} every single time`, (c, x) => `team ${c}, always`, (c, x) => `${x} over ${c}? not a chance`, (c, x) => `${c} wins, ${x} is a clown take` ],
+    yn: [ (yes, t) => `it's a ${yes ? "yes" : "no"}, obviously`, (yes, t) => `the ${yes ? "yes" : "no"} side runs this debate`, (yes, t) => `"${t}"? ${yes ? "hell yes" : "hell no"}`, (yes, t) => `${yes ? "yeah it is" : "nope, it's not"}, end of story` ],
+    st: [ (pro, t) => pro ? `"${t}" is elite` : `"${t}" is straight garbage`, (pro, t) => pro ? `I'm all for "${t}"` : `"${t}"? hard pass`, (pro, t) => pro ? `"${t}" stays winning` : `"${t}" is a disaster` ]
+  }
 };
 function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
 // Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
@@ -2121,50 +2117,55 @@ function reSides(topic) {
   if (isQ) return { kind: "yn" };
   return { kind: "st" };
 }
-// myKey "a"/"b" = which side of the topic THIS fighter argues.
-function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey) {
+// myKey "a"/"b" = which side THIS fighter argues; oppId = opponent's persona id.
+function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId) {
   const v = (vibe === "playful" || vibe === "unhinged") ? vibe : "savage";
   const t = (topic || "this whole thing").trim().replace(/"/g, "").slice(0, 80) || "this whole thing";
   const o = oppName || "champ";
   const n = rePickFresh(RE.noun[v], "noun" + v);
   const a = rePickFresh(RE.adj[v], "adj" + v);
   const an = /^[aeiou]/i.test(n) ? "an" : "a";
-  const key = myKey === "b" ? "b" : "a";   // default to side "a"
+  const key = myKey === "b" ? "b" : "a";
+  // The fighter's side stated as a short clause (so it doesn't just repeat "NO").
+  const sideClause = () => {
+    const s = reSides(t);
+    if (s.kind === "ab") { const c = key === "a" ? s.a : s.b, x = key === "a" ? s.b : s.a; return rePickFresh(RE.sideClause.ab, "scab")(c, x); }
+    if (s.kind === "yn") return rePickFresh(RE.sideClause.yn, "scyn")(key === "a", t);
+    return rePickFresh(RE.sideClause.st, "scst")(key === "a", t);
+  };
+  // A jab at the OPPONENT's actual character (Sherlock mocking Joe's podcast, etc.).
+  const jab = () => rePickFresh((oppId && RE.persona[oppId]?.mock) || RE.mockGeneric, "jab-" + (oppId || "x"));
+
   let body;
-  // ~35%: roast the opponent's MODEL if it's a different one.
-  if (oppModel && selfModel && oppModel !== selfModel && Math.random() < 0.35) {
-    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);
-  } else if (Math.random() < 0.78) {
-    // Mostly: actually CHAMPION this fighter's side and trash the opponent's.
-    const sides = reSides(t);
-    if (sides.kind === "ab") {
-      const c = key === "a" ? sides.a : sides.b, x = key === "a" ? sides.b : sides.a;
-      body = rePickFresh(RE.sideAB, "sideAB")(c, x, o, n, a, an);
-    } else if (sides.kind === "yn") {
-      body = rePickFresh(RE.sideYN, "sideYN")(key === "a", t, o, n, a, an);
-    } else {
-      body = rePickFresh(RE.sideST, "sideST")(key === "a", t, o, n, a, an);
-    }
+  const r = Math.random();
+  if (oppModel && selfModel && oppModel !== selfModel && r < 0.22) {
+    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL
+  } else if (r < 0.62) {
+    body = `${sideClause()}, ${o} — ${jab()}`;                    // argue the topic + roast their character
+  } else if (r < 0.86) {
+    body = `${jab()}, ${o}`;                                      // pure character roast
   } else {
-    body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);
+    body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);  // generic, for variety
   }
-  let opener = (isReply && Math.random() < 0.6)
+  // Opener: the speaker's OWN voice (keeps them in character), or a reply opener.
+  let opener = (isReply && Math.random() < 0.35)
     ? rePickFresh(RE.replyOpen, "reply")
-    : rePickFresh(RE.persona[personaId] || ["Listen,"], "persona-" + personaId);
-  // Unhinged: lead with a swear ~80% of the time (pools already curse hard too).
-  if (vibe === "unhinged" && Math.random() < 0.8) opener = reCap(rePickFresh(RE.swear, "swear")) + ",";
-  const tail = /[.!?]$/.test(opener) ? reCap(body) : body;   // capitalize if opener is its own sentence
-  let line = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
-  // Unhinged intensity: ~55% tack on a swear-burst ender for extra heat.
-  if (vibe === "unhinged" && Math.random() < 0.55) {
-    if (!/[.!?]$/.test(line)) line += ".";
-    line += " " + rePickFresh(RE.ender, "ender");
+    : rePickFresh(RE.persona[personaId]?.open || ["Listen,"], "open-" + personaId);
+  // Unhinged: weave a swear right after the voice opener (keeps the voice AND curses).
+  if (vibe === "unhinged" && Math.random() < 0.85) {
+    const sw = rePickFresh(RE.swear, "swear");
+    opener = /[.!?]$/.test(opener) ? `${opener} ${reCap(sw)},` : `${opener} ${sw},`;
   }
+  const tail = /[.!?]$/.test(opener) ? reCap(body) : body;
+  let line = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
+  if (!/[.!?]$/.test(line)) line += ".";
+  // Unhinged intensity: ~55% tack on a swear-burst ender.
+  if (vibe === "unhinged" && Math.random() < 0.55) line += " " + rePickFresh(RE.ender, "ender");
   return reCap(line);
 }
 // Stream the generated roast word-by-word so it types in like a real message.
-async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, signal) {
-  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey);
+async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, oppId, signal) {
+  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId);
   const parts = line.split(/(\s+)/);   // keep whitespace tokens
   for (const p of parts) {
     if (signal?.aborted) return;
@@ -2551,13 +2552,14 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     // Debate Club AI AND Chrome AI both route through the built-in Roast Engine —
     // rule-based, instant, always coherent, swears in unhinged. (Chrome AI's tiny
     // LLM used to talk nonsense; this makes it behave.)
+    const oppId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightId : b.leftId);
     const oppName = b.mode === "you-vs-ai"
       ? rePick(["champ", "pal", "hotshot", "big guy", "buddy"])
-      : (personas[personaId === b.leftId ? b.rightId : b.leftId]?.name);
+      : (personas[oppId]?.name);
     const selfModel = models[modelId]?.label;
     const oppModelId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightModelId : b.leftModelId);
     const oppModel = oppModelId ? models[oppModelId]?.label : null;
-    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, controller.signal);
+    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, oppId, controller.signal);
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
