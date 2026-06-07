@@ -1961,11 +1961,11 @@ function buildSystemPrompt(persona, stance, vibe) {
 // to echo in the user turn), give a one-shot example, and explicitly forbid
 // repeating the topic/instructions/opponent.
 function battleRulesLite(topic) {
-  return "\n\nYou are in a savage text roast battle. The debate topic is: " + topic + ". " +
-    "Reply with ONLY one short, savage, funny sentence that argues your side and mocks the other side. " +
+  return "\n\nThis is a savage ROAST BATTLE about: " + topic + ". " +
+    "In ONE short, mean, funny sentence, trash-talk the OTHER side's dumb take and make your own point — go straight at how bad their argument is. " +
     "PLAIN TEXT ONLY — no quotation marks, no asterisks, no stage directions, no emojis, no labels, no second sentence. " +
-    "Never repeat the topic, these instructions, or your opponent's words — always say something NEW. " +
-    "Example (different topic): Pineapple on pizza? Even your own dog skips that slice.";
+    "Never repeat the topic, these instructions, or your opponent's words. " +
+    "Example (different topic): Calling a hot dog a sandwich is the dumbest take since someone tried drinking soup with a fork.";
 }
 function buildSystemPromptLite(persona, stance, vibe, topic) {
   return persona.system_prompt + battleRulesLite(topic) + stanceLine(stance) + vibeLine(vibe);
@@ -1980,8 +1980,8 @@ function buildConversationLite(personaId, history) {
     const turn = history[i];
     if (turn?.persona_id && turn.persona_id !== personaId && typeof turn.content === "string") { lastOpp = turn.content; break; }
   }
-  if (!lastOpp) return [{ role: "user", content: "Drop your opening one-line roast now:" }];
-  return [{ role: "user", content: `Your rival just said: "${lastOpp}". Do NOT repeat or quote that. Fire back ONE brand-new savage line that mocks them and argues your side:` }];
+  if (!lastOpp) return [{ role: "user", content: "Open the battle with your most savage trash-talk line:" }];
+  return [{ role: "user", content: `The other side just said: "${lastOpp}". Tear that take apart — fire back ONE savage NEW line that mocks how dumb it is and makes your point:` }];
 }
 
 // Scrub the quirks tiny models add: stray asterisks, leading stage directions
@@ -2299,7 +2299,7 @@ async function* streamWebLLM(systemPrompt, messages, signal, onProgress) {
   // Tiny on-device models ramble and get incoherent at high temperature, so keep
   // it low and the cap short. We also STOP at the first finished sentence below so
   // the message stays one short line like a real text battle.
-  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 56, temperature: 0.85, top_p: 0.9, messages: chat }); }
+  try { chunks = await engine.chat.completions.create({ stream: true, max_tokens: 48, temperature: 0.85, top_p: 0.9, messages: chat }); }
   catch (e) { throw new Error(`On-Device AI — ${e.message || e}`); }
   let acc = "", stopped = false;
   for await (const c of chunks) {
