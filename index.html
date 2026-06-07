@@ -2400,6 +2400,107 @@ function reFill(tpl, ctx) {
     k === "T" ? ctx.T : k === "C" ? ctx.C : k === "X" ? ctx.X :
     k === "O" ? ctx.O : k === "N" ? ctx.N() : k === "A" ? ctx.A() : m);
 }
+// ─── Real-argument knowledge base (fact-checked, generated via workflow) ──────
+// So the fighters ACTUALLY argue with TRUE facts on popular topics — not just
+// topic-shaped insults. Matched by keyword; the fighter's parsed side maps to a
+// KB side. Any topic NOT here returns null and falls back to the topic templates
+// (and we nudge that a free AI key can argue real facts on ANY topic).
+// ab → "X vs Y" (sides are the named options); pa → statement/question (pro/anti).
+RE.knowledge = [
+  { id: "cats-dogs", kind: "ab", keys: ["cat", "dog"], sides: {
+    cat: [`Cats bury their waste and groom themselves, needing no walks or baths`, `A cat purrs at frequencies around 25-50 Hz linked to healing and stress relief`, `Cats are happy in apartments and use a litter box, no yard required`, `They hunt mice and pests, an instinct that historically protected food stores`, `Cats cost far less to feed and care for than a large dog`, `An independent cat tolerates long work hours without separation anxiety`],
+    dog: [`Dogs were domesticated over 15,000 years ago as humanity's first animal partner`, `A trained dog guards your home, alerting you to intruders`, `Dogs can be trained for search-and-rescue, guiding the blind, and detecting seizures`, `A dog's sense of smell is tens of thousands of times sharper than ours`, `Daily dog walks force their owners into regular cardiovascular exercise`, `Dogs read human gestures and emotions, forming deep social bonds`] } },
+  { id: "coffee-tea", kind: "ab", keys: ["coffee", "tea"], sides: {
+    coffee: [`A standard 8oz brewed cup packs roughly 95mg of caffeine, far more than most teas`, `Coffee delivers chlorogenic acids, antioxidants linked to lower type 2 diabetes risk`, `The faster, stronger caffeine hit makes it the superior morning wake-up drink`, `Espresso, cold brew, latte, pour-over: coffee offers a wide range of preparation styles`, `Coffee's bitterness and roasted aroma pair naturally with breakfast and dessert`, `Large studies tie moderate daily coffee intake to lower all-cause mortality`],
+    tea: [`L-theanine in tea smooths caffeine's jitters into calm, focused energy`, `Green tea's EGCG catechins are potent antioxidants tied to heart health`, `Tea spans white, green, oolong, black, pu-erh, plus endless herbal infusions`, `Lower caffeine means you can sip it through the afternoon without wrecking sleep`, `Tea is gentler on the stomach and less acidic than coffee`, `Brewed plain, tea is essentially calorie-free and needs no milk or sugar`] } },
+  { id: "iphone-android", kind: "ab", keys: ["iphone", "android"], sides: {
+    iphone: [`Apple supports iPhones with iOS updates for five to six years, far longer than most rivals`, `The A-series chips routinely beat Snapdragon flagships in single-core CPU benchmarks`, `iMessage end-to-end encryption and FaceTime keep your messages off carrier servers`, `App Tracking Transparency lets you block apps from following you across other apps`, `Resale value stays high: used iPhones hold their price far better than Android phones`, `Tight hardware-software integration means smooth performance even on years-old models`],
+    android: [`Android lets you sideload apps and install rival app stores openly by default`, `Expandable storage via microSD means cheap, swappable capacity on many models`, `You can set default browsers, launchers, and SMS apps system-wide`, `Android phones span every price, from budget handsets to folding flagships`, `Samsung and Google now match Apple with seven years of OS updates`, `Features like split-screen multitasking and true file-system access ship out of the box`] } },
+  { id: "marvel-dc", kind: "ab", keys: ["marvel", "dc"], sides: {
+    marvel: [`The MCU is the highest-grossing film franchise ever, topping 30 billion dollars worldwide`, `The Avengers (2012) pioneered the shared-universe model every studio now copies`, `Spider-Man is the best-selling superhero ever, relatable as a broke teenager from Queens`, `Stan Lee and Kirby built heroes with real flaws, anxiety, and money problems`, `Black Panther earned a Best Picture Oscar nomination, a comic-movie first`, `The X-Men gave mainstream comics their sharpest allegory for prejudice and civil rights`],
+    dc: [`DC published the first superhero, Superman in Action Comics #1 (1938), inventing the genre`, `Batman has no powers, just intellect, training, and money, making him the relatable one`, `The Dark Knight won Heath Ledger a posthumous Oscar for his Joker`, `Wonder Woman (1941) is the original iconic superheroine, decades ahead of rivals`, `Batman: The Animated Series and the DCAU set the gold standard for the medium`, `DC's villains, Joker, Lex Luthor, Darkseid, are the genre's most iconic rogues`] } },
+  { id: "playstation-xbox", kind: "ab", keys: ["playstation", "xbox"], sides: {
+    playstation: [`PS5's DualSense haptics and adaptive triggers deliver tactile feedback no Xbox controller matches`, `Sony's first-party studios shipped God of War, Spider-Man, and The Last of Us as platform exclusives`, `PlayStation has outsold Xbox in every console generation since Xbox launched in 2001`, `The PS5's custom SSD streams assets fast enough to nearly eliminate loading screens`, `PSVR2 gives PlayStation a built-in, eye-tracking VR ecosystem Xbox completely lacks`, `Sony's catalog of single-player narrative blockbusters defines the cinematic-game genre`],
+    xbox: [`Game Pass gives day-one access to hundreds of titles for one monthly fee`, `Xbox's acquisitions of Bethesda and Activision lock in ownership of Doom and Call of Duty`, `Quick Resume lets you suspend and instantly swap between several games at once`, `Xbox supports full backward compatibility spanning original Xbox, 360, and One libraries`, `Smart Delivery automatically gives you the best console version of any game you own`, `Xbox Series X has more raw teraflops of GPU power than the PS5`] } },
+  { id: "summer-winter", kind: "ab", keys: ["summer", "winter"], sides: {
+    summer: [`Long daylight hours boost serotonin and vitamin D production naturally`, `Warm water and beaches make swimming and ocean activities actually pleasant`, `Crops ripen in summer, delivering peak-flavor fruit like peaches and berries`, `Longer evenings mean more time outdoors after work or school`, `No frostbite risk, no shoveling snow, no scraping ice off windshields`],
+    winter: [`Cold weather lets you layer clothing infinitely; heat has a hard limit`, `Winter brings skiing, snowboarding, and ice skating you can't do otherwise`, `Fewer mosquitoes, ticks, and disease-carrying insects in freezing temperatures`, `Cooler temperatures improve deep sleep quality and reduce night sweating`, `Cozy fires, hot drinks, and holiday gatherings define winter's hygge appeal`, `Snow-covered landscapes and crisp clear air create stunning natural scenery`] } },
+  { id: "coke-pepsi", kind: "ab", keys: ["coke", "pepsi"], sides: {
+    coke: [`Coca-Cola has outsold Pepsi globally for over a century, dominating worldwide market share`, `Its 1886 recipe and secret formula make it the original cola, the one everyone imitates`, `Coke tastes more balanced and less sweet, holding up better with food and ice`, `The contour bottle and red logo are among the most recognized brand assets on Earth`, `Coke wins on its own merits over time, while Pepsi only edged ahead in tiny sip tests`],
+    pepsi: [`Pepsi reliably wins blind sip tests, as the famous Pepsi Challenge showed`, `Its sweeter, citrusier profile delivers a more immediate burst of flavor on first sip`, `Pepsi locked down a fast-food empire with Taco Bell, KFC, and Pizza Hut under PepsiCo`, `Pepsi pioneered celebrity marketing with stars like Michael Jackson and Britney Spears`, `PepsiCo is a far larger company, owning Frito-Lay, Gatorade, and Quaker on top of soda`] } },
+  { id: "starwars-startrek", kind: "ab", keys: ["star wars", "star trek"], sides: {
+    "star wars": [`The original 1977 film revolutionized cinema with ILM's groundbreaking practical effects and motion-control cameras`, `John Williams' iconic orchestral score is among the most recognizable music ever composed`, `The lightsaber is arguably the most famous fictional weapon in pop culture history`, `Darth Vader's "I am your father" is one of cinema's most legendary plot twists`, `The Force offers a mythic, Joseph Campbell hero's-journey framework with universal emotional resonance`, `It built a galaxy-spanning toy and merchandise empire that essentially invented modern film licensing`],
+    "star trek": [`It pioneered one of American TV's first scripted interracial kisses between Kirk and Uhura in 1968`, `Its optimistic vision imagines humanity solving war, poverty, and money through cooperation`, `It inspired engineers, with devices like the flip phone echoing the communicator's design`, `Episodes tackled real issues like racism and the Cold War through allegory`, `It spans far more storytelling hours across dozens of seasons of episodic depth`, `Warp drive, transporters, and replicators sparked real scientific and engineering discussion`] } },
+  { id: "books-movies", kind: "ab", keys: ["book", "movie"], sides: {
+    book: [`Books trigger your own imagination, so every reader envisions the story uniquely`, `A novel can spend hundreds of pages inside a character's head, which film can't show directly`, `Reading builds vocabulary, focus, and comprehension in ways passive watching doesn't`, `You control the pace, rereading a sentence or pausing to think whenever you want`, `Books have no runtime limit, so subplots and detail survive instead of getting cut`],
+    movie: [`Movies combine acting, cinematography, music, and editing into one synchronized art form`, `A film delivers a complete story in about two hours, not days of reading`, `Visual effects and real locations show spectacle words can only gesture at`, `A score by someone like Hans Zimmer adds emotion no page can play aloud`, `Movies are shared experiences you can watch together in a theater or on a couch`, `A single actor's expression can convey what a paragraph struggles to describe`] } },
+  { id: "messi-ronaldo", kind: "ab", keys: ["messi", "ronaldo"], sides: {
+    messi: [`Won eight Ballon d'Or awards, more than any player in history`, `Holds the all-time record for goals in a single calendar year with 91`, `Captained Argentina to the 2022 World Cup, the trophy that crowns a career`, `Set La Liga's single-season scoring record with 50 goals in 2011-12`, `Won six European Golden Shoes, the most of any player`, `His left-footed dribbling and vision make him the most complete playmaker ever`],
+    ronaldo: [`Is the all-time top scorer in men's international football with over 130 goals`, `Holds the record for most goals in Champions League history with 140-plus`, `Won league titles in England, Spain, and Italy, proving he adapts anywhere`, `Scored over 900 senior career goals, an all-time record across club and country`, `Won five Champions League titles, anchoring multiple European campaigns`] } },
+  { id: "pizza-burgers", kind: "ab", keys: ["pizza", "burger"], sides: {
+    pizza: [`Endless topping permutations mean pizza never repeats the same meal twice`, `Shareable by design: one pie slices cleanly for a whole table`, `UNESCO granted heritage status to the Neapolitan art of the pizzaiolo`, `Cold leftover pizza is a legitimate breakfast, no reheating required`, `Balanced bite combines grain, tomato, cheese, and protein in one slice`, `Fermented dough develops complex flavor that a quick patty can't match`],
+    burger: [`A seared patty delivers the Maillard crust pizza dough rarely achieves`, `Fully customizable stack: cheese, bacon, egg, sauce, swapped at will`, `Beef packs dense protein and iron in a single handheld portion`, `Cooks in minutes flat on any grill or skillet`, `Self-contained format needs no plate, slice, or sharing`, `Endless regional styles, from smashburger to brioche to plant-based patties`] } },
+  { id: "batman-superman", kind: "ab", keys: ["batman", "superman"], sides: {
+    batman: [`A normal human with no powers operates fearlessly among gods and aliens`, `His detective skills are unmatched; the World's Greatest Detective solves what others cannot`, `He prepares contingency plans to neutralize every Justice League member, including Superman`, `Kryptonite and tactical genius let him beat Superman in The Dark Knight Returns`, `Self-made through training and intellect rather than gifted by alien biology`, `A strict no-kill code makes his restraint a choice, not a limitation`],
+    superman: [`Near-invulnerability, flight, heat vision, super strength, and freeze breath in one being`, `He can move faster than a speeding bullet and has reversed disasters at super speed`, `His Kryptonian biology converts yellow sunlight directly into immense power`, `He saves the whole world, not just one city's streets`, `An unbreakable moral compass makes his power genuinely trustworthy`, `Super hearing and X-ray vision let him sense danger across the entire planet`] } },
+  { id: "pc-console", kind: "ab", keys: ["pc", "console"], sides: {
+    pc: [`Uncapped framerates and 1440p+ resolutions outclass consoles locked to lower settings`, `Steam sales slash game prices far below console store standards`, `Mouse-and-keyboard precision dominates in shooters and strategy genres`, `Mods and Steam Workshop let players overhaul games endlessly for free`, `Hardware is upgradeable, so you swap a GPU instead of buying a whole new box`, `One machine handles gaming, work, browsing, and emulation in a single device`, `Old PC games keep running for decades, so backward compatibility is strong`, `No paywall exists for online multiplayer the way consoles charge subscriptions`],
+    console: [`Plug-and-play means games just run without driver updates or settings tweaking`, `Fixed hardware lets developers optimize deeply, so titles run consistently`, `Upfront cost is far lower than a comparable gaming PC build`, `Living-room couch play with controllers suits local multiplayer and party games`, `Console exclusives like Mario and Zelda are unavailable elsewhere`, `Standardized hardware means far fewer compatibility bugs and crashes`, `Trade-in and physical disc resale recover money PC digital libraries cannot`, `Simpler closed ecosystem makes cheating and malware much rarer online`] } },
+  { id: "window-aisle", kind: "ab", keys: ["window", "aisle"], sides: {
+    window: [`You control the window shade and the view of clouds, cities, and sunsets`, `Your head rests against the wall for actual sleep on long flights`, `Nobody climbs over you, so you stay undisturbed the entire flight`, `The curved fuselage wall gives you a second armrest-like surface to lean on`, `You get the best photos of mountains, coastlines, and aerial landmarks`, `You are tucked in a defined corner with more personal space and less aisle traffic`],
+    aisle: [`You can get up to use the bathroom anytime without climbing over anyone`, `Extra legroom to stretch one leg into the aisle during the flight`, `You are first off the plane, beating the crowd to connections`, `Flight attendants reach you first with drinks, snacks, and service`, `Easy access to the overhead bin without disturbing seatmates`, `You feel less boxed in, which helps with claustrophobia on long flights`] } },
+  { id: "introvert-extrovert", kind: "ab", keys: ["introvert", "extrovert"], sides: {
+    introvert: [`Deep focus comes easier when your baseline arousal doesn't crave constant stimulation`, `Solo deliberate practice, the engine of mastery, fits introverts naturally`, `Introverts recharge alone, so they're rarely dependent on others for energy`, `Listening more than talking often makes them better observers of detail`, `Lower reward-seeking impulsivity means fewer rash, dopamine-driven decisions`, `Comfort with solitude makes long writing, coding, or research sessions sustainable`, `Smaller, deeper friendships tend to provide stronger long-term social support`],
+    extrovert: [`Higher dopamine reward sensitivity makes extroverts more energized by social action`, `They're more likely to emerge as leaders in groups`, `Comfort speaking up gives them an edge in interviews and negotiations`, `Broad networks mean more weak ties, which research links to job opportunities`, `Extroversion is the Big Five trait most consistently correlated with happiness`, `Thinking out loud lets them process and build ideas through conversation`] } },
+  { id: "earlybird-nightowl", kind: "ab", keys: ["early bird", "night owl"], sides: {
+    "early bird": [`Morning sunlight sets your circadian clock and boosts daytime cortisol and alertness`, `Self-discipline correlates with morningness; early risers report higher conscientiousness`, `School and work start times reward morning people, easing chronic sleep debt`, `Cortisol naturally peaks within an hour of waking, ideal for hard cognitive work`, `Early exercisers are more likely to stick with workout routines long-term`, `Eating earlier aligns meals with daytime metabolism, improving glucose handling`],
+    "night owl": [`Evening types often score higher on creativity and divergent-thinking tasks`, `Chronotype is substantially genetic, so owls aren't lazy, just wired differently`, `Many breakthroughs happen at night with fewer interruptions and a quieter environment`, `Peak alertness later means sustained focus through the afternoon and evening`, `Owls can sustain mental performance later into the day than larks can`] } },
+  { id: "texting-calling", kind: "ab", keys: ["text", "call"], sides: {
+    text: [`Texting is asynchronous, so neither person has to be free at the same moment`, `It leaves a searchable written record of addresses, times, and decisions`, `You can edit and reread before sending, avoiding things you can't take back`, `It's silent and discreet in meetings, libraries, or a sleeping household`, `You can attach links, photos, screenshots, and locations a voice call can't carry`, `It respects focus, letting people reply when they're not mid-task or driving`],
+    call: [`Voice carries tone and emotion that flat text constantly gets misread without`, `Real-time back-and-forth resolves a complex issue in minutes, not all day`, `Hearing a familiar voice releases oxytocin and lowers stress more than texting`, `You get instant feedback, so no waiting hours wondering if they saw it`, `It's far harder to ghost or stall when someone is actually talking to you`, `Speaking is roughly three times faster than thumb-typing the same message`] } },
+  { id: "cardio-weights", kind: "ab", keys: ["cardio", "weight"], sides: {
+    cardio: [`Aerobic training raises VO2 max, the fitness measure most tied to longevity`, `It strengthens the heart muscle, lowering resting heart rate and blood pressure`, `Sustained cardio burns more calories per session than typical lifting`, `It improves lung capacity and oxygen delivery throughout the whole body`, `Regular aerobic exercise reliably reduces risk of heart disease and stroke`],
+    weight: [`Resistance training is the primary stimulus for building real muscle mass`, `Lifting loads bone, increasing density and guarding against osteoporosis`, `More muscle raises resting metabolism, so you burn calories at rest`, `Strength training directly fights sarcopenia, the age-related loss of muscle`, `Building strength makes everyday lifting and carrying genuinely easier and safer`] } },
+  { id: "tabs-spaces", kind: "ab", keys: ["tab", "space"], sides: {
+    tab: [`A single tab lets each developer choose their own visible indent width`, `Screen-reader and Braille-display users can widen tabs for real accessibility gains`, `One tab equals one indent level, so the character matches the meaning`, `Tabs use fewer bytes per line than multiple spaces for the same depth`, `Go ships gofmt that officially standardizes on tabs for every file`],
+    space: [`Spaces render identically in every editor, terminal, and diff viewer`, `Python's PEP 8 explicitly recommends spaces as the preferred indentation`, `Spaces let you align continuation lines to an exact column reliably`, `Mixing tabs and spaces raises TabError and breaks Python files outright`, `Most major style guides, including Google's, mandate spaces over tabs`] } },
+  { id: "pineapple-pizza", kind: "pa", keys: ["pineapple", "pizza"], sides: {
+    pro: [`Hawaiian pizza was invented in 1962 by Sam Panopoulos in Ontario, Canada`, `Sweet-and-savory pairings are a culinary staple, like prosciutto with melon`, `Pineapple's acidity cuts through fatty cheese and salty ham beautifully`, `Bromelain in pineapple tenderizes meat and adds a bright enzymatic tang`, `It is one of the most ordered pizza toppings worldwide, so demand is real`, `Roasting caramelizes pineapple sugars, deepening flavor against smoky crust`],
+    anti: [`Pineapple's high water content makes the crust soggy and structurally weak`, `Its acidity clashes with delicate mozzarella, overpowering subtler flavors`, `Traditional Neapolitan pizza is a protected recipe with no fruit in its rules`, `Bromelain breaks down proteins, turning cheese and toppings mushy`, `Heat amplifies the sweetness, making a savory dish taste like dessert`, `In Italy, pizza's birthplace, pineapple is widely rejected as inauthentic`] } },
+  { id: "hotdog-sandwich", kind: "pa", keys: ["dog", "sandwich"], sides: {
+    pro: [`Merriam-Webster defines a sandwich as a filling between two slices of bread or a split roll, which a hotdog literally is`, `The bun is sliced bread enclosing a meat filling, the textbook sandwich structure`, `Cold-cut subs on hinged rolls are sandwiches, and a hotdog bun is identical`, `The USDA classifies a closed hotdog as a sandwich for labeling and regulatory purposes`, `A single hinge of bread still leaves two sides hugging the filling like any sub`],
+    anti: [`The bun is one connected piece, not two separate slices, so it fails the definition`, `Hotdogs have their own culinary category, name, and history independent of sandwiches`, `The National Hot Dog and Sausage Council officially states a hotdog is not a sandwich`, `Structure differs: the filling sits in a vertical cradle, not pressed between flat layers`, `Nobody orders a 'sausage sandwich' at a ballpark and expects a hotdog`, `The cylindrical sausage and split-top bun form a distinct food, like a taco or wrap`] } },
+  { id: "cereal-soup", kind: "pa", keys: ["cereal", "soup"], sides: {
+    pro: [`Soup is defined as solid pieces of food served in a liquid, which cereal exactly is`, `Cold soups like gazpacho and vichyssoise prove heat is not required`, `You eat both with a spoon from a bowl, leftover liquid and all`, `Milk is the broth, grains are the solids, identical structure to any chowder`, `Bread-and-milk dishes were literally called sops, the linguistic root of soup`],
+    anti: [`A true soup needs a savory stock base, not sweetened breakfast milk`, `Soup is cooked as a unified dish, not assembled cold at the table`, `Milk is a beverage poured over food, not a broth simmered with it`, `Culinary tradition and menus classify soup as a savory course, never dessert`, `The grains stay crunchy and separate, never melding into one cohesive liquid`] } },
+  { id: "water-wet", kind: "pa", keys: ["water", "wet"], sides: {
+    pro: [`By touch, liquid water feels wet, which is the everyday definition of the word`, `Water molecules cling to each other through hydrogen bonding, coating every adjacent molecule`, `Wetness describes liquid contacting a surface, and water's molecules constantly contact other water`, `If a single drop is wet, then a body of water is simply more wet`, `Cohesion makes water adhere to itself, satisfying the contact condition for wetness`],
+    anti: [`Wetness is a property an object gains when a liquid coats it, not the liquid itself`, `Physically, wetness describes a solid's surface holding liquid, so water makes things wet`, `Water cannot wet itself; it is the agent that wets other materials`, `Dryness and wetness are states of solids, and water is a liquid, not a solid`, `Adhesion to a surface defines wetting, and water has no separate surface to adhere to`] } },
+  { id: "social-media", kind: "pa", keys: ["social media"], sides: {
+    pro: [`Social media lets ordinary people organize movements and hold power accountable, as in the Arab Spring`, `It connects isolated people to support communities, from rare-disease patients to LGBTQ youth`, `Small businesses reach customers directly without expensive traditional advertising budgets`, `It spreads breaking emergency information fast, helping coordinate disaster response and missing-person searches`, `It democratizes knowledge, letting experts share science and skills with billions for free`],
+    anti: [`Algorithms optimize for engagement, amplifying outrage and misinformation over accurate, calmer content`, `Rising teen depression and self-harm correlate with the smartphone-and-social-media era since 2012`, `Infinite-scroll and variable rewards are engineered to be addictive, hijacking dopamine like slot machines`, `It enables mass surveillance and harvesting of personal data sold to advertisers and brokers`, `Filter bubbles and echo chambers deepen polarization by feeding people only agreeable views`] } }
+];
+// Find the KB entry whose keywords ALL appear in the topic (or null).
+function reKnowledgeEntry(topic) {
+  if (!RE.knowledge) return null;
+  const t = (topic || "").toLowerCase();
+  return RE.knowledge.find(e => e.keys.every(k => t.includes(k))) || null;
+}
+function reKnowledgeHas(topic) { return !!reKnowledgeEntry(topic); }
+// A real, fact-checked argument for THIS fighter's side of a known topic, or null.
+function reKnowledge(topic, sides, key) {
+  const e = reKnowledgeEntry(topic);
+  if (!e) return null;
+  if (e.kind === "ab") {
+    if (sides.kind !== "ab") return null;               // need named sides to map
+    const myName = (key === "a" ? sides.a : sides.b).toLowerCase();
+    for (const sk of Object.keys(e.sides)) {
+      if (myName.includes(sk) || sk.includes(myName.replace(/s$/, ""))) return rePickFresh(e.sides[sk], "kb" + e.id + sk);
+    }
+    return null;
+  }
+  return rePickFresh(key === "a" ? e.sides.pro : e.sides.anti, "kb" + e.id + (key === "a" ? "p" : "n"));
+}
 // Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
 const __reRecent = {};
 function rePickFresh(arr, key) {
@@ -2481,13 +2582,19 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
     } else if (oppModel && selfModel && oppModel !== selfModel && r < 0.08) {
       body = rePickFresh(RE.mjab, "mjab")(oppModel, o, ctx.A());     // roast the opponent's MODEL (rare)
     } else {
-      // Topic-aware templates DOMINATE (~64%) so each topic reads differently.
+      // A REAL, fact-checked argument for known topics — so they ACTUALLY argue
+      // with substance while insulting each other (not just topic-shaped jabs).
+      const realArg = reKnowledge(t, sides, key);
+      // Topic-aware templates DOMINATE so each topic reads differently.
       const tp = oppId && RE.topicPersona[oppId] && RE.topicPersona[oppId][set];
-      if (tp && tp.length && r < 0.34) { body = reFill(rePickFresh(tp, "tp" + oppId + set), ctx); standalone = true; }   // topic + opponent's persona
-      else if (r < 0.72) { body = reFill(rePickFresh(RE.topic[set], "tt" + set), ctx); standalone = true; }              // topic, generic
-      else if (r < 0.82) body = `${factClause()}, ${o}`;             // a "fact"/argument case
-      else if (r < 0.90) body = `${sideClause()}, ${o} — ${jab()}`; // argue the side + character jab
-      else if (r < 0.96) body = `${jab()}, ${o}`;                   // pure character jab
+      if (realArg && r < 0.45) {                                     // real fact + insult
+        body = Math.random() < 0.5 ? `${realArg} — ${jab()}, ${o}` : `${realArg}. ${reCap(jab())}, ${o}`;
+        standalone = true;
+      } else if (tp && tp.length && r < 0.62) { body = reFill(rePickFresh(tp, "tp" + oppId + set), ctx); standalone = true; }   // topic + opponent's persona
+      else if (r < 0.80) { body = reFill(rePickFresh(RE.topic[set], "tt" + set), ctx); standalone = true; }                    // topic, generic
+      else if (r < 0.87) body = `${factClause()}, ${o}`;             // a generic "fact"/argument case
+      else if (r < 0.93) body = `${sideClause()}, ${o} — ${jab()}`; // argue the side + character jab
+      else if (r < 0.97) body = `${jab()}, ${o}`;                   // pure character jab
       else { const n = rePickFresh(RE.noun[v], "noun" + v); body = rePickFresh(RE.body, "body")(t, o, n, rePickFresh(RE.adj[v], "adj" + v), rePickFresh(RE.since, "since"), an(n)); }
     }
     // Opener: shout (unhinged) / agreement (glaze) / sometimes none for a full topic
@@ -2520,7 +2627,7 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
     let tail;
     if (/[.!?]$/.test(opener)) tail = reCap(body);
     else if (body.startsWith(o) || /^[A-Z]{2,}/.test(body)) tail = body;
-    else if (/^[A-Z][a-z]/.test(body)) tail = body.charAt(0).toLowerCase() + body.slice(1);
+    else if (/^[A-Z][a-z]/.test(body) || /^An? /.test(body)) tail = body.charAt(0).toLowerCase() + body.slice(1);
     else tail = body;
     let l = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
     if (!/[.!?]$/.test(l)) l += ".";
@@ -3186,7 +3293,12 @@ function maybeNudgeAfterOnDevice(b) {
   const group = document.createElement("div");
   group.className = "msg-group left";
   group.style.alignSelf = "center"; group.style.maxWidth = "100%";
-  group.innerHTML = `<button type="button" class="nudge-bubble">🔥 Want smarter, more varied AI roasts? Add a <strong>free Gemini key</strong> (no card) →</button>`;
+  // For topics NOT in the built-in fact base, push the real-AI option (it can argue
+  // REAL facts on ANY topic). For known topics, a lighter "even smarter" nudge.
+  const msg = reKnowledgeHas(b.topic)
+    ? `🔥 Want smarter, real-time AI roasts? Add a <strong>free Gemini key</strong> (no card) →`
+    : `🔥 Want them arguing <strong>real facts</strong> about "${escapeHtml((b.topic || "this").slice(0, 40))}"? Add a <strong>free Gemini key</strong> (no card) →`;
+  group.innerHTML = `<button type="button" class="nudge-bubble">${msg}</button>`;
   group.querySelector(".nudge-bubble").addEventListener("click", openSettings);
   $("thread").appendChild(group);
   scrollToBottom();
