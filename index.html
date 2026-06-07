@@ -2055,6 +2055,17 @@ async function* readSSE(body, signal, extract) {
   }
 }
 
+// Gemini's DEFAULT safety filters block roast-battle content — harassment and
+// profanity get softened or dropped entirely, which reads as "won't swear" and
+// empty/garbled replies. This is an opt-in comedy roast app, so we relax the
+// filters to BLOCK_NONE and let the burns (and unhinged swearing) actually land.
+const GEMINI_SAFETY = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+];
+
 // Call the AI provider DIRECTLY from the browser — no backend, so this works on
 // GitHub Pages / any static host. Uses the user's own key from their browser
 // (the same key never leaves their machine except to the provider they chose).
@@ -2086,7 +2097,7 @@ async function* streamCloudDirect(provider, model, systemPrompt, messages, apiKe
       resp = await fetch(url, {
         method: "POST", signal,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents, generationConfig: { maxOutputTokens: MAX_TOKENS_CLIENT } })
+        body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents, safetySettings: GEMINI_SAFETY, generationConfig: { maxOutputTokens: MAX_TOKENS_CLIENT } })
       });
     } else {
       throw new Error(`Unsupported provider: ${provider}`);
