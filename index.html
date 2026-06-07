@@ -870,7 +870,7 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    🔥 On-Device AI is basic. Add a <strong>free Gemini key</strong> (no card) for <strong>GIFs, emojis &amp; real character roasts</strong>.
+    🔥 Playing free with the built-in roaster. Add a <strong>free Gemini key</strong> (no card) for <strong>GIFs, emojis &amp; even wilder AI roasts</strong>.
     <a href="#" id="banner-settings-link">Set up →</a>
   </div>
 
@@ -1326,12 +1326,12 @@ try { if (__webllmCrashedLastLoad) localStorage.removeItem(WEBLLM_LOADING_KEY); 
 // when the device can run it, else the free Gemini path. Never default to Chrome
 // AI / Nano (silently fails on phones), and never to on-device if it just crashed.
 function pickDefaultModel() {
-  try { if (navigator.gpu && !__webllmCrashedLastLoad) return "on-device-webllm"; } catch {}
-  // No WebGPU, or on-device just crashed the tab → use a cloud model that works.
+  // The built-in Roast Engine needs no key, no GPU, no download — it works on
+  // every device — so it's always a safe default for someone without a key.
   if (getKey("google")) return "gemini-2-5-flash-lite";
   if (getKey("anthropic")) return "claude-haiku-4-5";
   if (getKey("openai")) return "gpt-4o-mini";
-  return "gemini-2-5-flash-lite";
+  return "on-device-webllm";
 }
 const personaA = buildCustomSelect($("persona-a"), personaOptions, personaIds[0], (id) => refreshEmoji("a", id));
 const personaB = buildCustomSelect($("persona-b"), personaOptions, personaIds[1], (id) => refreshEmoji("b", id));
@@ -1470,14 +1470,9 @@ function buildKeyBlocks() {
     block.className = "key-block on-device-block";
     block.innerHTML = `
       <div class="key-block-head">
-        <h3 class="field-label on-device-heading">On-Device AI <span class="free-badge">NO KEY</span></h3>
+        <h3 class="field-label on-device-heading">On-Device Roaster <span class="free-badge">NO KEY</span></h3>
       </div>
-      <p class="on-device-note">Runs free right in your browser on your device's GPU — no key, no limits, nothing leaves your device. <strong>Desktop</strong> uses Gemma-2-2B (~1.4&nbsp;GB). <strong>Phones</strong> use a lighter, optimized model (~0.9&nbsp;GB) — Gemma-2-2B is too big for phone memory and would crash the tab. First use downloads it once, then it's cached (no second download). Needs WebGPU — works on most 2024+ Android phones, iPhones on iOS&nbsp;26+, and any modern desktop browser.</p>
-      <button class="btn btn--small btn--secondary on-device-dl" id="webllm-download" type="button">Download / enable On-Device AI</button>
-      <div class="on-device-status" id="webllm-status" role="status" aria-live="polite"></div>`;
-    block.querySelector("#webllm-download").addEventListener("click", () => {
-      downloadWebLLM(block.querySelector("#webllm-status"), block.querySelector("#webllm-download"));
-    });
+      <p class="on-device-note">A built-in roast generator — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, and it <strong>swears in Unhinged mode</strong>. It's the default, so you can just hit Start. (For GIFs, emojis, and even wilder AI roasts, add a free Gemini key above.)</p>`;
     return block;
   }
 
@@ -2017,6 +2012,77 @@ function cleanOnDeviceText(t) {
   return s.length >= 2 ? s : orig.replace(/\*+/g, "").trim();
 }
 
+// ─── Built-in Roast Engine (rule-based — no model, no GPU, no download) ──
+// A tiny 0.5B LLM produced nonsense and wouldn't swear. This deterministic
+// generator instead ALWAYS produces a coherent, on-topic, persona-flavoured
+// roast — and actually swears in unhinged mode. Runs instantly on any device.
+const RE = {
+  noun: {
+    playful:  ["goofball", "clown", "goober", "doofus", "muppet", "champ"],
+    savage:   ["clown", "amateur", "fraud", "walking disaster", "embarrassment", "walnut", "muppet", "clown-show"],
+    unhinged: ["dumbass", "jackass", "absolute clown", "walnut-brained goblin", "smooth-brained donkey", "trash-tier bozo", "cabbage-headed disaster", "soggy little bastard"]
+  },
+  adj: {
+    playful:  ["silly", "goofy", "rookie", "cute little", "confused"],
+    savage:   ["brain-dead", "laughable", "pathetic", "embarrassing", "smooth-brained", "garbage", "bottom-tier"],
+    unhinged: ["dogshit", "ass-backwards", "god-awful", "brain-dead", "absolutely deranged", "dumpster-tier", "balls-to-the-wall stupid"]
+  },
+  since: [
+    "someone tried drinking soup with a fork",
+    "a toddler lost an argument to a stop sign",
+    "someone brought a spoon to a knife fight",
+    "a goldfish tried to file its taxes",
+    "someone microwaved a salad",
+    "a pigeon tried to read a map",
+    "a screen door got installed on a submarine"
+  ],
+  swear: ["damn", "hell", "holy hell", "goddamn", "what the hell", "for crying out loud", "holy shit", "oh hell no"],
+  persona: {
+    sherlock:    ["Elementary —", "Predictable.", "I solved you already:", "Obvious, really:"],
+    rogan:       ["Bro,", "Man,", "Listen, dude —", "That's wild —"],
+    stoic:       ["Pitiful.", "Stay mad.", "How much you care is adorable.", "Unbothered, as always:"],
+    infomercial: ["FOLKS,", "BUT WAIT —", "ACT NOW:", "BREAKING:"]
+  },
+  replyOpen: ["Nice try, but", "Cute. Anyway,", "You really said that?", "Adorable cope —", "Sit down —", "Swing and a miss —", "Bless your heart,"],
+  // template(topic, opp, noun, adj, since, an) → roast body  (`an` = "a"/"an" for noun)
+  body: [
+    (t, o, n, a, s, an) => `your whole take on "${t}" is ${a}, ${o} — you absolute ${n}.`,
+    (t, o, n, a, s, an) => `picking your side on "${t}" is the dumbest thing I've seen since ${s}, you ${n}.`,
+    (t, o, n, a, s, an) => `imagine being this ${a} about "${t}". ${o}, you're ${an} ${n} and everyone knows it.`,
+    (t, o, n, a, s, an) => `"${t}"? That take is so ${a} it belongs in a museum, ${o}.`,
+    (t, o, n, a, s, an) => `only ${an} ${n} argues "${t}" the way you do, ${o}. Genuinely ${a}.`,
+    (t, o, n, a, s, an) => `${o}, your "${t}" argument has the structural integrity of wet cardboard — total ${n} energy.`,
+    (t, o, n, a, s, an) => `the way you fumble "${t}" is ${a}. Hang it up, ${o}, you ${n}.`,
+    (t, o, n, a, s, an) => `losing the "${t}" debate to ME? That's ${a}, ${o}. Embarrassing for ${an} ${n} like you.`
+  ]
+};
+function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function reCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function reGenerate(personaId, topic, vibe, isReply, oppName) {
+  const v = (vibe === "playful" || vibe === "unhinged") ? vibe : "savage";
+  const t = (topic || "this whole thing").trim().replace(/"/g, "").slice(0, 80) || "this whole thing";
+  const o = oppName || "champ";
+  const n = rePick(RE.noun[v]);
+  const body = rePick(RE.body)(t, o, n, rePick(RE.adj[v]), rePick(RE.since), /^[aeiou]/i.test(n) ? "an" : "a");
+  let opener = (isReply && Math.random() < 0.6)
+    ? rePick(RE.replyOpen)
+    : rePick(RE.persona[personaId] || ["Listen,"]);
+  // Unhinged: lead with a swear most of the time (the unhinged word-pools already curse too).
+  if (vibe === "unhinged" && Math.random() < 0.7) opener = reCap(rePick(RE.swear)) + ",";
+  const tail = /[.!?]$/.test(opener) ? reCap(body) : body;   // capitalize if opener is its own sentence
+  return reCap(`${opener} ${tail}`.replace(/\s+/g, " ").trim());
+}
+// Stream the generated roast word-by-word so it types in like a real message.
+async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, signal) {
+  const line = reGenerate(personaId, topic, vibe, isReply, oppName);
+  const parts = line.split(/(\s+)/);   // keep whitespace tokens
+  for (const p of parts) {
+    if (signal?.aborted) return;
+    yield p;
+    await sleep(22 + Math.random() * 26);
+  }
+}
+
 function buildConversationFromPOV(personaId, topic, history) {
   const messages = [];
   for (const turn of history) {
@@ -2394,16 +2460,12 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   if (isOnDeviceModel) {
     tokenSource = streamOnDevice(systemPrompt, convo, controller.signal);
   } else if (isInBrowser(modelDef.provider)) {
-    // On-device WebGPU model — first turn may download the model; show progress
-    // in the typing bubble so it doesn't look frozen.
-    tokenSource = streamWebLLM(systemPrompt, convo, controller.signal, (pct, text, isFallback, cached) => {
-      const bubble = typingEl.querySelector(".bubble");
-      if (!bubble) return;
-      bubble.classList.add("dl-progress");
-      const what = isFallback ? "a lighter model for this device" : "on-device AI";
-      const verb = cached ? "Loading" : "Downloading";
-      bubble.textContent = pct >= 100 ? "Warming up the model…" : `${verb} ${what}… ${pct}%`;
-    });
+    // Built-in Roast Engine — rule-based, instant, no model/GPU/download. Always
+    // coherent + on-topic, and actually swears in unhinged mode.
+    const oppName = b.mode === "you-vs-ai"
+      ? rePick(["champ", "pal", "hotshot", "big guy", "buddy"])
+      : (personas[personaId === b.leftId ? b.rightId : b.leftId]?.name);
+    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, controller.signal);
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
@@ -2646,7 +2708,7 @@ function maybeNudgeAfterOnDevice(b) {
   const group = document.createElement("div");
   group.className = "msg-group left";
   group.style.alignSelf = "center"; group.style.maxWidth = "100%";
-  group.innerHTML = `<button type="button" class="nudge-bubble">🔥 That was the basic on-device bot. Add a <strong>free Gemini key</strong> for GIFs, emojis &amp; real character roasts →</button>`;
+  group.innerHTML = `<button type="button" class="nudge-bubble">🔥 Want GIFs, emojis &amp; even wilder AI roasts? Add a <strong>free Gemini key</strong> (no card) →</button>`;
   group.querySelector(".nudge-bubble").addEventListener("click", openSettings);
   $("thread").appendChild(group);
   scrollToBottom();

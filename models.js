@@ -10,12 +10,12 @@ export const models = {
     label: "Gemini",
     tier: "free"
   },
-  // ── No key at all — runs in the browser on the device's GPU (WebGPU) ──
-  // Actual model is chosen at runtime by device: Gemma-2-2B on desktop, an
-  // optimized 4-bit Llama-3.2-1B on phones so it actually fits in memory.
+  // ── No key, no download, no GPU — the built-in rule-based Roast Engine ──
+  // (id kept as -webllm for back-compat with saved selections; it now routes to
+  // streamRoastEngine, not WebLLM, because a phone-sized LLM produced nonsense.)
   "on-device-webllm": {
     provider: "webllm",
-    model: "auto",
+    model: "roast-engine",
     label: "On-Device",
     tier: "no key"
   },
