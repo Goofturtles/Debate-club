@@ -1972,13 +1972,27 @@ function stanceLine(stance) {
   if (stance === "against") return "\n\nYOUR ASSIGNED SIDE: you are AGAINST the topic. Argue passionately to oppose it; never concede.";
   return "";  // auto — pick your own side
 }
+// Explicit side directive for CLOUD models so they argue the EXACT side the
+// scoreboard shows — including the named side for "X vs Y" topics, which a plain
+// FOR/AGAINST can't pin down. (The built-in engine already does this via myKey.)
+// glaze = both fighters share a side → tell them to agree and hype each other.
+function sideDirective(topic, myKey, glaze) {
+  const s = reSides(topic);
+  const key = myKey === "b" ? "b" : "a";
+  let mine, theirs;
+  if (s.kind === "ab")      { mine = key === "a" ? s.a : s.b; theirs = key === "a" ? s.b : s.a; }
+  else if (s.kind === "yn") { mine = key === "a" ? "YES on this" : "NO on this"; theirs = key === "a" ? "NO" : "YES"; }
+  else                      { mine = key === "a" ? "FOR the topic" : "AGAINST the topic"; theirs = key === "a" ? "the AGAINST side" : "the FOR side"; }
+  if (glaze) return `\n\nYOUR ASSIGNED SIDE: you and your opponent are on the SAME side — you are BOTH ${mine}. You AGREE with them: do NOT attack your opponent. Instead hype them up, gas up their points, and pile on the other side together.`;
+  return `\n\nYOUR ASSIGNED SIDE: argue for ${mine}${s.kind === "ab" ? `, against ${theirs}` : ""}. Commit fully and never concede to ${theirs}.`;
+}
 function vibeLine(vibe) {
   if (vibe === "playful")  return "\nTONE: playful and cocky — teasing, goofy jabs, more funny than cruel, but still landing hits.";
   if (vibe === "unhinged") return "\nTONE: ABSOLUTELY UNHINGED and FOUL-MOUTHED — feral, chaotic, zero filter, completely off the rails, the occasional ALL-CAPS outburst. You MUST swear HARD on EVERY line — real profanity, drop f-bombs (fuck, shit, etc.) and curse your opponent out with zero filter, no matter the topic. Maximum chaos.";
   return "\nTONE: SAVAGE. Ice-cold, brutal, ruthless — every single line ENDS them.";  // savage default
 }
-function buildSystemPrompt(persona, stance, vibe) {
-  return persona.system_prompt + BATTLE_RULES + stanceLine(stance) + vibeLine(vibe);
+function buildSystemPrompt(persona, sideDir, vibe) {
+  return persona.system_prompt + BATTLE_RULES + sideDir + vibeLine(vibe);
 }
 
 // Tiny on-device models choke on the full rulebook (they take the *italics*,
@@ -2650,7 +2664,7 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const myKey = effStance === "against" ? "b" : "a";
   const systemPrompt = onDeviceLite
     ? buildSystemPromptLite(persona, effStance, b.vibe, b.topic)
-    : buildSystemPrompt(persona, stance, b.vibe);
+    : buildSystemPrompt(persona, sideDirective(b.topic, myKey, !!b.glaze), b.vibe);
   const convo = onDeviceLite
     ? buildConversationLite(personaId, b.history, b.vibe)
     : buildConversationFromPOV(personaId, b.topic, b.history);
