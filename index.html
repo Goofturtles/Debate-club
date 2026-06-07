@@ -1302,13 +1302,22 @@ function buildCustomSelect(rootEl, options, initialValue, onChange) {
 const personaOptions = Object.entries(personas).map(([id, p]) => ({ value: id, label: p.name, avatar: p.avatar }));
 const modelOptions = Object.entries(models).map(([id, m]) => ({ value: id, label: m.label, color: providers[m.provider].color, trailing: m.tier }));
 
-// Default to a model that just works for THIS visitor: their own key if they
-// have one, otherwise the free Gemini path (the highlighted, works-on-every-phone
-// option). Never default to Chrome AI / Nano — it silently fails on phones.
+// Crash-loop guard: we set this localStorage marker right before loading an
+// on-device model and clear it the instant the load returns (success OR a normal
+// error). If a FRESH page load still finds it set, the previous load hard-crashed
+// the tab (an uncatchable iOS OOM that silently reloads the page). In that case we
+// stop defaulting to on-device so the user doesn't bounce in an endless reload.
+const WEBLLM_LOADING_KEY = "aidebate.webllm.loading";
+let __webllmCrashedLastLoad = false;
+try { __webllmCrashedLastLoad = localStorage.getItem(WEBLLM_LOADING_KEY) === "1"; } catch {}
+try { if (__webllmCrashedLastLoad) localStorage.removeItem(WEBLLM_LOADING_KEY); } catch {}
+
+// Default to a model that just works for THIS visitor: free no-key On-Device AI
+// when the device can run it, else the free Gemini path. Never default to Chrome
+// AI / Nano (silently fails on phones), and never to on-device if it just crashed.
 function pickDefaultModel() {
-  // Default to free, no-key On-Device AI whenever the device can run it (WebGPU).
-  try { if (navigator.gpu) return "on-device-webllm"; } catch {}
-  // No WebGPU (e.g. older iOS) → fall back to a cloud model so the app still works.
+  try { if (navigator.gpu && !__webllmCrashedLastLoad) return "on-device-webllm"; } catch {}
+  // No WebGPU, or on-device just crashed the tab → use a cloud model that works.
   if (getKey("google")) return "gemini-2-5-flash-lite";
   if (getKey("anthropic")) return "claude-haiku-4-5";
   if (getKey("openai")) return "gpt-4o-mini";
@@ -1387,6 +1396,9 @@ function refreshAllKeyPills() {
   refreshKeyPill($("key-pill-a"), dropdownA.getValue());
   refreshKeyPill($("key-pill-b"), dropdownB.getValue());
   let seen = false; try { seen = localStorage.getItem("aidebate.seenSetup") === "1"; } catch {}
+  // If on-device crashed this session, keep the crash notice up until they add a
+  // cloud key (so it isn't silently toggled away).
+  if (__webllmCrashedLastLoad && !hasAnyCloudKey()) { $("no-keys-banner").classList.add("active"); return; }
   $("no-keys-banner").classList.toggle("active", !hasAnyCloudKey() && !seen);
 }
 
@@ -1531,6 +1543,17 @@ $("winner-overlay").addEventListener("click", (e) => {
 });
 refreshAllKeyPills();
 maybeShowSetupHint();
+
+// If on-device AI crashed (OOM-reloaded) the tab last time, explain the switch
+// to the reliable free Gemini path so the user isn't stuck in a reload loop.
+if (__webllmCrashedLastLoad) {
+  const banner = $("no-keys-banner");
+  if (banner) {
+    banner.innerHTML = '⚠️ On-device AI used too much memory and reloaded the page — switched to the <strong>free Gemini key</strong> (cloud-based, works on any phone with no crash). <a href="#" id="banner-crash-link">Get a free key →</a>';
+    banner.classList.add("active");
+    $("banner-crash-link")?.addEventListener("click", (e) => { e.preventDefault(); openSettings(); });
+  }
+}
 
 // ─── Battle ──────────────────────────────────────────────────────────
 let battle = null;
@@ -2138,20 +2161,23 @@ function isMobileLike() {
   try { return matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
   catch { return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || ""); }
 }
-// Which on-device model(s) to try, best-first. Desktop gets Gemma-2-2B (better
-// roasts). Phones NEVER get Gemma — it OOM-crashes phone tabs — they get a
-// phone-sized 4-bit model (Llama-3.2-1B, or tiny Qwen-0.5B on low-RAM phones).
+// Which on-device model(s) to try, best-first. Desktop gets Gemma-2-2B. Phones
+// NEVER get Gemma (OOM) and default to a tiny 0.5B model that actually fits in a
+// phone tab's memory; only phones reporting >=8GB RAM attempt the larger Llama-1B.
 function pickWebLLMModelChain() {
   const GEMMA = "gemma-2-2b-it-q4f16_1-MLC";        // best quality — desktop only (~1.4GB GPU)
-  const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; // phone-sized (~0.9GB), still good roasts
-  const TINY  = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"; // last-resort for low-RAM phones (~0.5GB)
+  const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; // good roasts (~0.9GB) — beefy phones only
+  const TINY  = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"; // small + coherent (~0.5GB) — phone default
+  const SMOL  = "SmolLM2-360M-Instruct-q4f16_1-MLC"; // smallest safety net (~0.4GB)
   if (!isMobileLike()) return [GEMMA, LLAMA];        // desktop: Gemma, Llama if it can't load
-  // IMPORTANT: Gemma-2-2B OOM-*crashes* a phone browser tab — and that crash kills
-  // the whole page (it can't be caught, so a try/catch fallback can't save it).
-  // Phones must therefore NEVER load Gemma. Pick a model sized for phone memory.
+  // Phones are memory-tight: loading too big a model OOM-*reloads* the tab (an
+  // uncatchable iOS crash). So we stay small. Only well-equipped phones that
+  // REPORT >=8GB (some Android) try Llama-1B; everything else — including ALL
+  // iOS, which never reports memory — uses the tiny 0.5B model, falling back to
+  // an even smaller one. Gemma is never loaded on a phone.
   const mem = navigator.deviceMemory || 0;           // GB on Android; undefined → 0 on iOS
-  if (mem && mem <= 4) return [TINY];                 // small/old phone → smallest model only
-  return [LLAMA, TINY];                               // normal phone → Llama-1B, tiny as backup
+  if (mem >= 8) return [LLAMA, TINY, SMOL];           // beefy phone → Llama, then smaller
+  return [TINY, SMOL];                                // everything else → tiny models only
 }
 const __webllm = { mod: null, engine: null, modelId: null, loading: null, worker: null };
 // A module worker that hosts the WebLLM engine off the main thread. Built from a
@@ -2185,6 +2211,9 @@ async function getWebLLMEngine(onProgress) {
       let cached = false;
       try { cached = mod.hasModelInCache ? await mod.hasModelInCache(id) : false; } catch {}
       let worker = null;
+      // Mark "loading" so that if this hard-crashes the tab (uncatchable iOS OOM),
+      // the next page load detects it and stops defaulting to on-device.
+      try { localStorage.setItem(WEBLLM_LOADING_KEY, "1"); } catch {}
       try {
         worker = makeWebLLMWorker();
         // Run in the worker, with a small context window so the KV cache stays tiny.
@@ -2193,9 +2222,11 @@ async function getWebLLMEngine(onProgress) {
           { initProgressCallback: (p) => { try { onProgress?.(Math.round((p.progress || 0) * 100), p.text || "", isFallback, cached); } catch {} } },
           { context_window_size: WEBLLM_CTX }
         );
+        try { localStorage.removeItem(WEBLLM_LOADING_KEY); } catch {}   // loaded — no crash
         __webllm.engine = engine; __webllm.modelId = id; __webllm.worker = worker;
         return engine;
       } catch (e) {
+        try { localStorage.removeItem(WEBLLM_LOADING_KEY); } catch {}   // caught = tab survived
         lastErr = e;
         try { worker?.terminate(); } catch {}   // free the dead worker before trying smaller
         try { console.warn("On-device model couldn't load, trying a smaller one:", id, e); } catch {}
