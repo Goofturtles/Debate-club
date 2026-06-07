@@ -874,7 +874,7 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    🔥 Playing free with the built-in roaster (GIFs &amp; emojis included). Add a <strong>free Gemini key</strong> (no card) for <strong>smarter, more varied AI roasts</strong>.
+    🔥 Playing free with the built-in roaster. Add a <strong>free key</strong> (no card, 1 tap) and the Debate Club AI becomes a <strong>real AI that knows everything</strong> &amp; argues any topic.
     <a href="#" id="banner-settings-link">Set up →</a>
   </div>
 
@@ -1332,12 +1332,13 @@ try { if (__webllmCrashedLastLoad) localStorage.removeItem(WEBLLM_LOADING_KEY); 
 // when the device can run it, else the free Gemini path. Never default to Chrome
 // AI / Nano (silently fails on phones), and never to on-device if it just crashed.
 function pickDefaultModel() {
-  // The built-in Roast Engine needs no key, no GPU, no download — it works on
-  // every device — so it's always a safe default for someone without a key.
-  if (getKey("google")) return "gemini-2-5-flash-lite";
+  // "Debate Club AI" works for EVERYONE: the offline rule engine with no key, and
+  // it upgrades to real Gemini (knows everything, any topic) the moment a free
+  // Google key exists. So it's the default both for the no-key visitor AND the
+  // (most common) Gemini-key visitor. Only default elsewhere for Claude/GPT-only.
+  if (getKey("google") || (!getKey("anthropic") && !getKey("openai"))) return "on-device-webllm";
   if (getKey("anthropic")) return "claude-haiku-4-5";
-  if (getKey("openai")) return "gpt-4o-mini";
-  return "on-device-webllm";
+  return "gpt-4o-mini";
 }
 const personaA = buildCustomSelect($("persona-a"), personaOptions, personaIds[0], (id) => refreshEmoji("a", id));
 const personaB = buildCustomSelect($("persona-b"), personaOptions, personaIds[1], (id) => refreshEmoji("b", id));
@@ -1474,11 +1475,21 @@ function buildKeyBlocks() {
   function buildWebLLMBlock() {
     const block = document.createElement("div");
     block.className = "key-block on-device-block";
+    const hasGem = !!getKey("google");
     block.innerHTML = `
       <div class="key-block-head">
-        <h3 class="field-label on-device-heading">Debate Club AI <span class="free-badge">NO KEY</span></h3>
+        <h3 class="field-label on-device-heading">Debate Club AI <span class="free-badge">${hasGem ? "REAL AI" : "DEFAULT"}</span></h3>
       </div>
-      <p class="on-device-note">Our built-in roast engine — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, swears <strong>hard in Unhinged mode</strong>, and roasts the other fighter's model when they differ. It's the default, so just hit Start. (For smarter, more varied AI-generated roasts, add a free Gemini key above.)</p>`;
+      <p class="on-device-note">${hasGem
+        ? `<strong>Now powered by real AI</strong> — it knows everything and argues <strong>any topic with real facts</strong> while roasting, and still swears hard in Unhinged. Offline or rate-limited? It falls back to the instant built-in engine automatically. Works on phone and computer.`
+        : `Works <strong>instantly with no key</strong> on every phone — coherent, on-topic, swears in Unhinged. <strong>Add a free key and it becomes a real AI</strong> that knows everything and argues <strong>any topic with real facts</strong> (free, no credit card, works on phone and computer).`}</p>
+      ${hasGem ? "" : `<button class="btn btn--small key-get--primary on-device-dl" id="get-free-ai" type="button">⚡ Make it know everything — get free AI</button>`}`;
+    const getBtn = block.querySelector("#get-free-ai");
+    if (getBtn) getBtn.addEventListener("click", () => {
+      window.open("https://aistudio.google.com/apikey", "_blank", "noopener");
+      const input = $("key-input-google");
+      if (input) { input.scrollIntoView({ block: "center", behavior: "smooth" }); input.focus(); }
+    });
     return block;
   }
 
@@ -3013,6 +3024,41 @@ async function downloadWebLLM(statusEl, btn) {
   }
 }
 
+// The cheapest live Gemini tier — what "Debate Club AI" upgrades to once a free key
+// exists. (Same id as the standalone Gemini model so it shares the free quota.)
+const DEBATE_AI_GEMINI_MODEL = "gemini-2.5-flash-lite";
+// "Debate Club AI" with a free Gemini key = a REAL AI that knows everything and can
+// argue ANY topic. It tries Gemini first; on ANY failure (offline, rate-limited,
+// blocked, or an empty reply) it falls back SEAMLESSLY to the offline rule engine,
+// so a battle never stalls and works with or without a connection.
+async function* streamSmartDebateAI(systemPrompt, convo, key, signal, engineGen) {
+  let it, step, timer;
+  try {
+    it = streamCloudDirect("google", DEBATE_AI_GEMINI_MODEL, systemPrompt, convo, key, signal)[Symbol.asyncIterator]();
+    // Race the first token against a timeout so a STALLED connection (accepted but
+    // silent) can't hang the default model — fall back to the instant engine.
+    step = await Promise.race([
+      it.next(),                                  // surfaces auth/network/CORS/rate errors up front
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("gemini-stall")), 9000); })
+    ]);
+    clearTimeout(timer);
+  } catch {
+    clearTimeout(timer);
+    if (signal?.aborted) return;
+    yield* engineGen(); return;                   // Gemini unreachable/stalled → offline engine
+  }
+  if (!step || step.done) {                        // Gemini returned nothing usable → engine
+    if (signal?.aborted) return;
+    yield* engineGen(); return;
+  }
+  yield step.value;
+  while (true) {
+    try { step = await it.next(); } catch { return; }   // mid-stream drop: keep what we streamed
+    if (step.done) return;
+    yield step.value;
+  }
+}
+
 // ─── streamTurn ──────────────────────────────────────────────────────
 async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const controller = new AbortController();
@@ -3040,9 +3086,10 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
 
   let tokenSource;
   if (isOnDeviceModel || isInBrowser(modelDef?.provider)) {
-    // Debate Club AI AND Chrome AI both route through the built-in Roast Engine —
-    // rule-based, instant, always coherent, swears in unhinged. (Chrome AI's tiny
-    // LLM used to talk nonsense; this makes it behave.)
+    // "Debate Club AI" (and Chrome AI). The OFFLINE rule engine is the baseline —
+    // instant, no key, swears in unhinged. But the MOMENT a free Gemini key exists,
+    // this model LEVELS UP to a real AI that knows everything and can argue ANY
+    // topic, with the rule engine as a seamless offline/rate-limit fallback.
     const oppId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightId : b.leftId);
     const oppName = b.mode === "you-vs-ai"
       ? rePick(["champ", "pal", "hotshot", "big guy", "buddy"])
@@ -3050,9 +3097,17 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     const selfModel = models[modelId]?.label;
     const oppModelId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightModelId : b.leftModelId);
     const oppModel = oppModelId ? models[oppModelId]?.label : null;
-    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, oppId, !!b.glaze, controller.signal);
+    const engineGen = () => streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, oppId, !!b.glaze, controller.signal);
+    const geminiKey = getKey("google");
+    if (geminiKey) {
+      const fullPrompt = buildSystemPrompt(persona, sideDirective(b.topic, myKey, !!b.glaze), b.vibe);
+      const fullConvo = buildConversationFromPOV(personaId, b.topic, b.history);
+      tokenSource = streamSmartDebateAI(fullPrompt, fullConvo, geminiKey, controller.signal, engineGen);
+    } else {
+      tokenSource = engineGen();
+    }
   } else {
-    // Cloud models: call the provider straight from the browser (no backend).
+    // Cloud models the user explicitly picked: call the provider straight from the browser.
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
   }
 
