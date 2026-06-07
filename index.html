@@ -1746,7 +1746,7 @@ async function startBattle() {
   stopBtn.onclick = () => {
     if (!battle) return;
     if (mode === "ai-vs-ai") { battle.stopped = true; if (battle.abort) battle.abort.abort(); }
-    else { endYouVsAi(); }
+    else { endYouVsAi().catch(() => {}); }   // fire-and-forget; judge path can't reject, but stay explicit
   };
   $("battle-controls").classList.remove("hidden");
   updateCounter(0);
