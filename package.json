@@ -1,0 +1,14 @@
+{
+  "name": "ai-debate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Two AIs debate, you judge.",
+  "scripts": {
+    "dev": "node --env-file=.env dev-server.js",
+    "dev:nofile": "node dev-server.js"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  }
+}
