@@ -608,6 +608,11 @@
     border: 1px solid var(--border);
     border-radius: 980px;
   }
+  /* The AI judge's verdict — a touch brighter than a "left the chat" line. */
+  .judge-msg {
+    color: #e7e3ff; font-weight: 600; max-width: 88%; line-height: 1.45;
+    background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.34);
+  }
 
   .gif-inline { display: block; max-width: 220px; border-radius: 12px; }
   /* A GIF sent as its own follow-up bubble (still one turn) — tighter than a text bubble */
@@ -1047,7 +1052,7 @@
     <div class="crown-label" id="winner-modal-title">Winner</div>
     <div class="avatar-big" id="winner-avatar" aria-hidden="true"></div>
     <h2 class="name-big" id="winner-name"></h2>
-    <p class="quip">Crowned by you, the supreme judge.</p>
+    <p class="quip" id="winner-quip">Crowned by you, the supreme judge.</p>
     <div class="winner-actions">
       <button class="btn btn--primary" id="again-btn">Run it back</button>
       <button class="btn btn--secondary" id="export-btn" type="button">⬇ Export battle (with GIFs)</button>
@@ -1951,23 +1956,30 @@ function sendUserGif(url, query) {
   aiTurn(battle);
 }
 
-function endYouVsAi() {
+async function endYouVsAi() {
   if (battle) battle.stopped = true;       // signal any in-flight aiTurn to bail
   if (battle?.abort) battle.abort.abort();
   $("composer-wrap").classList.remove("active");
   $("battle-controls").classList.add("hidden");
   if (!battle || battle.history.length === 0) { resetToSetup(); return; }
-  // Self-judged verdict: You vs the opponent
-  const opp = personas[battle.leftId];
+  const b = battle;                        // capture — judging is async
+  const opp = personas[b.leftId];
   const you = { avatar: USER_AVATAR, name: "You" };
+  const youLines = b.history.filter((h) => h.persona_id === USER_ID).map((h) => h.content);
+  const aiLines = b.history.filter((h) => h.persona_id !== USER_ID).map((h) => h.content);
+  // An AI judge decides based on the ACTUAL roasts — no self-voting.
+  $("verdict-row").classList.remove("active");
+  $("verdict-banner").textContent = "⚖️ The judge is reading the roasts…";
   $("verdict-banner").classList.add("active");
-  $("verdict-row").classList.add("active");
-  $("vote-left").textContent = `${opp.avatar} ${opp.name}`;
-  $("vote-right").textContent = `${USER_AVATAR} You`;
-  $("vote-left").onclick = () => declareWinner(opp, you);
-  $("vote-right").onclick = () => declareWinner(you, opp);
-  maybeNudgeAfterOnDevice(battle);
+  maybeNudgeAfterOnDevice(b);
   scrollToBottom();
+  const v = await judgeBattle(youLines, "You", aiLines, opp.name, b.topic);
+  if (battle !== b) return;                // user reset / started a new battle mid-judge
+  $("verdict-banner").classList.remove("active");
+  $("verdict-banner").textContent = "Who won?";   // restore default for next time / AI-vs-AI
+  const youWon = v.winner === "a";
+  appendJudgeVerdict(`⚖️ Judge: ${youWon ? "You win" : opp.name + " wins"} — ${v.reason}`);
+  declareWinner(youWon ? you : opp, youWon ? opp : you, v.reason);
 }
 
 // ─── Conversation builders  !!! KEEP IN SYNC with api/debate.js !!! ──
@@ -3482,15 +3494,99 @@ function finishBattle() {
   scrollToBottom();
 }
 
-// The user crowned `winner`; `loser` rage-quits the group chat for laughs,
-// then the trophy modal drops after a short beat.
+// ─── AI judge ─────────────────────────────────────────────────────────────────
+// Decides who won based on the ACTUAL roasts — free either way. With a Gemini key
+// it's a REAL AI judge that reads the transcript; with no key it's a heuristic
+// scorer that rates each side's lines on aggression, substance, topic focus, and
+// wit. Returns { winner:"a"|"b", reason }.
+const JUDGE_BURNS = ["clown", "trash", "dumb", "lose", "loser", "stupid", "pathetic", "weak", "embarrass", "cope", "cry", "fool", "idiot", "wrong", "fraud", "garbage", "bozo", "walnut", "fumble", "ratio", "shut", "worst", "sit down", "delete", "touch grass", "fold", "washed", "get fucked", "womp", "obliterat", "destroy"];
+const JUDGE_SWEARS = ["fuck", "shit", "damn", "hell", "ass", "bastard", "bitch", "crap", "dogshit", "goddamn", "prick"];
+function countHits(text, words) {
+  let n = 0;
+  const list = Array.isArray(words) ? words : [words];
+  for (const w of list) { if (!w) continue; let i = text.indexOf(w); while (i !== -1) { n++; i = text.indexOf(w, i + w.length); } }
+  return n;
+}
+function scoreRoasts(lines, topic) {
+  const text = (lines.join(" ") || "").toLowerCase();
+  const words = text.split(/\s+/).filter(Boolean);
+  const topicWords = (topic || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 3);
+  const burns = countHits(text, JUDGE_BURNS);
+  const swears = countHits(text, JUDGE_SWEARS);
+  let topicHits = 0; for (const tw of topicWords) topicHits += countHits(text, tw);
+  const facts = lines.filter((l) => l.length > 70).length;            // substantive, argued lines
+  const variety = words.length ? new Set(words).size / words.length : 0;
+  const score = burns * 3 + swears * 2 + topicHits * 2 + facts * 5 + Math.min(words.length, 240) * 0.12 + variety * 25 + lines.length * 2;
+  return { score, burns, swears, topicHits, facts, variety, words: words.length, lines: lines.length };
+}
+function judgeReason(w, l, name, loserName) {
+  // Weighted by the same factors the score uses, so the reason reflects what
+  // actually drove the win (not just raw word count, whose gaps dwarf the rest).
+  const factors = [
+    { k: "facts", wt: 5, t: `${name} actually brought real arguments while ${loserName} just flailed.` },
+    { k: "burns", wt: 3, t: `${name} landed the harder roasts — ${loserName} got cooked.` },
+    { k: "swears", wt: 2, t: `${name} went fully unhinged and committed to the bit.` },
+    { k: "topicHits", wt: 2, t: `${name} stayed locked on the topic; ${loserName} kept wandering off.` },
+    { k: "variety", wt: 25, t: `${name} had the sharper, more varied wit.` },
+    { k: "words", wt: 0.12, t: `${name} brought more heat and never let up.` },
+  ];
+  let best = null, gap = -Infinity;
+  for (const f of factors) { const g = ((w[f.k] || 0) - (l[f.k] || 0)) * f.wt; if (g > gap) { gap = g; best = f; } }
+  return gap > 0 && best ? best.t : `${name} edged it out on sheer firepower — it was close.`;
+}
+function heuristicJudge(linesA, nameA, linesB, nameB, topic) {
+  const sa = scoreRoasts(linesA, topic), sb = scoreRoasts(linesB, topic);
+  return sa.score >= sb.score
+    ? { winner: "a", reason: judgeReason(sa, sb, nameA, nameB) }
+    : { winner: "b", reason: judgeReason(sb, sa, nameB, nameA) };
+}
+async function llmJudge(linesA, nameA, linesB, nameB, topic, key) {
+  const transcript = `${nameA}:\n${linesA.map((l) => "• " + l).join("\n")}\n\n${nameB}:\n${linesB.map((l) => "• " + l).join("\n")}`;
+  const sys = `You are the ruthless but fair JUDGE of a roast debate about "${topic}". Read both fighters' lines and decide who won — weigh who made the better arguments AND who landed the harder, funnier roasts. Reply with ONLY compact JSON and nothing else: {"winner":"A" or "B","reason":"one short punchy sentence on why they won"}.`;
+  const msgs = [{ role: "user", content: `${transcript}\n\nWho won — A (${nameA}) or B (${nameB})? JSON only.` }];
+  let out = "";
+  for await (const t of streamCloudDirect("google", DEBATE_AI_GEMINI_MODEL, sys, msgs, key)) out += t;
+  const m = out.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  const j = JSON.parse(m[0]);
+  const winner = /^\s*a/i.test(String(j.winner)) ? "a" : "b";
+  const reason = String(j.reason || "").trim().slice(0, 220);
+  return reason ? { winner, reason } : null;
+}
+// Pick the judge: real Gemini if a key exists (bounded; falls back to heuristic on
+// any error/timeout), else the free heuristic. Always resolves to a verdict.
+async function judgeBattle(linesA, nameA, linesB, nameB, topic) {
+  if (getKey("google")) {
+    try {
+      const p = llmJudge(linesA, nameA, linesB, nameB, topic, getKey("google"));
+      p.catch(() => {});   // if the timeout wins the race, don't leave this orphaned
+      const r = await Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("judge-timeout")), 12000))]);
+      if (r) return r;
+    } catch {}
+  }
+  return heuristicJudge(linesA, nameA, linesB, nameB, topic);
+}
+// Drop a centered judge-verdict line into the thread (and the export transcript).
+function appendJudgeVerdict(text) {
+  const row = document.createElement("div");
+  row.className = "leave-row";
+  const msg = document.createElement("span");
+  msg.className = "leave-msg judge-msg";
+  msg.textContent = text;
+  row.appendChild(msg);
+  $("thread").appendChild(row);
+  scrollToBottom();
+}
+
+// `winner` is crowned; `loser` rage-quits the group chat for laughs, then the
+// trophy modal drops after a short beat. `reason` (optional) is the judge's verdict.
 let __crownTimer = null;
-function declareWinner(winner, loser) {
+function declareWinner(winner, loser, reason) {
   $("verdict-row").classList.remove("active");
   $("verdict-banner").classList.remove("active");
   appendLeaveMessage(loser);
   clearTimeout(__crownTimer);
-  __crownTimer = setTimeout(() => crown(winner), 1400);
+  __crownTimer = setTimeout(() => crown(winner, reason), 1400);
 }
 
 function appendLeaveMessage(loser) {
@@ -3510,10 +3606,12 @@ function showBackToSetup() {
   btn.classList.remove("btn--danger"); btn.classList.add("btn--secondary");
   btn.onclick = resetToSetup;
 }
-function crown(persona) {
+function crown(persona, reason) {
   __lastFocusBeforeModal = document.activeElement;
   $("winner-avatar").textContent = persona.avatar;
   $("winner-name").textContent = persona.name;
+  const quip = $("winner-quip");
+  if (quip) quip.textContent = reason ? `⚖️ ${reason}` : "Crowned by you, the supreme judge.";
   $("winner-overlay").classList.add("active");
   requestAnimationFrame(() => $("again-btn")?.focus());
 }
