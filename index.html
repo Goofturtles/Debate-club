@@ -1683,15 +1683,19 @@ async function startBattle() {
     const lSide = sideLabel(cfg.topic, lKey), rSide = sideLabel(cfg.topic, rKey);
     setStanceBadge("left", lKey, lSide);
     setStanceBadge("right", rKey, rSide);
+    // Both on the SAME side → they're allies; glaze/hype each other instead of fighting.
+    const glaze = lKey === rKey;
     // Announce the resolved sides to screen readers, since "Random" hides them visually.
     const ann = $("sides-announce");
-    if (ann) ann.textContent = (lSide && rSide) ? `${left.name} argues ${lSide}, ${right.name} argues ${rSide}.` : "";
+    if (ann) ann.textContent = !(lSide && rSide) ? ""
+      : glaze ? `${left.name} and ${right.name} both argue ${lSide} — they're on the same side.`
+              : `${left.name} argues ${lSide}, ${right.name} argues ${rSide}.`;
     battle = {
       mode, topic: cfg.topic, vibe,
       leftId: cfg.aId, rightId: cfg.bId,
       leftModelId: cfg.modelAId, rightModelId: cfg.modelBId,
       leftStance: lStance, rightStance: rStance,
-      sideFlip,
+      sideFlip, glaze,
       maxTurns: parseInt(roundsSeg.getValue(), 10) || 10,
       history: [], stopped: false, abort: null
     };
@@ -2054,8 +2058,10 @@ const RE = {
     "a flat-earther bought a globe"
   ],
   // sensible swear leads (no self-directed "fuck me" — that read as nonsense)
-  swear: ["fuck", "shit", "goddamn", "holy shit", "what the fuck", "oh hell no", "for fuck's sake", "fucking hell", "damn", "hell"],
-  ender: ["Sit the fuck down.", "Fucking embarrassing.", "Absolute clown shit.", "Get bent.", "Cry about it.", "Eat shit.", "Hang it the fuck up."],
+  swear: ["fuck", "shit", "goddamn", "holy shit", "what the fuck", "oh hell no", "for fuck's sake", "fucking hell", "damn", "hell", "Christ", "bullshit", "good fucking lord", "oh fuck no", "fuck outta here", "fucking christ", "my god", "no fucking way"],
+  ender: ["Sit the fuck down.", "Fucking embarrassing.", "Absolute clown shit.", "Get bent.", "Cry about it.", "Eat shit.", "Hang it the fuck up.", "Shut the fuck up.", "Touch grass.", "Log the fuck off.", "Womp womp.", "Hold this L.", "Be so fucking for real.", "Go to bed.", "Stay pressed.", "Ratio.", "Get fucked.", "Nobody asked, sit down.", "Delete your account.", "Cope harder."],
+  // Aggressive "shut up" interjections — used to OPEN a reply in unhinged mode.
+  shutup: ["Shut the fuck up,", "Shut your fucking mouth,", "Shut up,", "Fuck off,", "Pipe the fuck down,", "Quit fucking yapping,", "Shut the entire fuck up,", "Nobody asked,", "Hush, you absolute clown —", "Stop fucking talking,"],
   // Each persona has its OWN voice (open) AND a set of jabs at THAT character, so a
   // fighter roasts the OPPONENT's persona (Sherlock mocks Joe Rogan's podcast, etc.).
   persona: {
@@ -2099,6 +2105,34 @@ const RE = {
     yn: [ (yes, t) => `it's a ${yes ? "yes" : "no"}, obviously`, (yes, t) => `the ${yes ? "yes" : "no"} side runs this debate`, (yes, t) => `"${t}"? ${yes ? "hell yes" : "hell no"}`, (yes, t) => `${yes ? "yeah it is" : "nope, it's not"}, end of story` ],
     st: [ (pro, t) => pro ? `"${t}" is elite` : `"${t}" is straight garbage`, (pro, t) => pro ? `I'm all for "${t}"` : `"${t}"? hard pass`, (pro, t) => pro ? `"${t}" stays winning` : `"${t}" is a disaster` ]
   },
+  // "Fact"/argument clauses — rhetorical appeals to data/experts/receipts so a fighter
+  // sounds like they're making a CASE, not just insulting. (Topic-agnostic by design —
+  // the engine can't know real facts, so these are argument *moves*, not claims.)
+  fact: {
+    ab: [ (c, x) => `every actual stat backs ${c} over ${x}`, (c, x) => `the data's on ${c}'s side, not ${x}`, (c, x) => `ask any expert alive — ${c} beats ${x}`, (c, x) => `${c} has receipts, ${x} has excuses`, (c, x) => `history literally sides with ${c}; ${x} folds every time`, (c, x) => `the numbers don't lie: ${c} clears ${x}` ],
+    yn: [ (yes, t) => `the numbers say ${yes ? "yes" : "no"}, full stop`, (yes, t) => `every expert worth a damn lands on ${yes ? "yes" : "no"}`, (yes, t) => `the evidence is a hard ${yes ? "yes" : "no"} and you know it`, (yes, t) => `look it up — it's ${yes ? "yes" : "no"}, the data's clear` ],
+    st: [ (pro, t) => pro ? `the facts back "${t}" and it's not close` : `every stat shreds "${t}"`, (pro, t) => pro ? `look it up, "${t}" checks out` : `look it up, "${t}" falls apart`, (pro, t) => pro ? `the receipts are all pro-"${t}"` : `the receipts bury "${t}"` ]
+  },
+  // Same-side GLAZE: when BOTH fighters argue the same side, they hype each other up
+  // instead of fighting (still funny, still curses in unhinged). c = the shared side.
+  glazeOpen: ["Honestly?", "Facts —", "Exactly,", "No because—", "See, THIS is it —", "Finally, some sense —", "Real talk,", "Nah listen,"],
+  glaze: [
+    (o, c) => `${o}, you actually GET it — ${c} all day`,
+    (o, c) => `see, ${o} understands. we're so right it's unfair`,
+    (o, c) => `${o}'s cooking and I'm just here to agree — ${c} stays winning`,
+    (o, c) => `real recognizes real, ${o}. anyone backing ${c} is a genius`,
+    (o, c) => `${o} said it better than I could. ${c} forever`,
+    (o, c) => `we're on the same team and we're BOTH right, ${o}`,
+    (o, c) => `${o}, you and me? unstoppable. ${c} clears everything`,
+    (o, c) => `give ${o} a medal — finally someone with a working brain. ${c} it is`
+  ],
+  glazeGeneric: [
+    (o) => `${o}, you're a legend for this`,
+    (o) => `${o} gets it and everyone else is just slow`,
+    (o) => `I'd take a bullet for this take, ${o}`,
+    (o) => `${o}'s the smartest one in this whole debate, easily`,
+    (o) => `straight up, ${o}, marry this take`
+  ],
   // trending emojis (vibe-appropriate) + roast-reaction gif searches (Tenor)
   emoji: {
     playful:  ["😏", "😎", "😜", "🤭", "👀", "💅"],
@@ -2117,9 +2151,12 @@ function rePickFresh(arr, key) {
   let c, tries = 0;
   do { c = rePick(arr); tries++; } while (recent.indexOf(c) !== -1 && tries < 15);
   recent.push(c);
-  while (recent.length > Math.min(arr.length - 1, 5)) recent.shift();
+  while (recent.length > Math.min(arr.length - 1, 8)) recent.shift();
   return c;
 }
+// Line-level anti-repeat: remember the last several full roast cores so reGenerate
+// never serves the same line twice in a short span (separate from per-pool freshness).
+const __reSeen = [];
 function reCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 // Split the topic into two sides so the fighters can actually argue them.
 //  "X vs Y" / "X or Y" → ab (named sides); "is/should/can X…?" → yn (yes/no);
@@ -2138,49 +2175,91 @@ function reSides(topic) {
   return { kind: "st" };
 }
 // myKey "a"/"b" = which side THIS fighter argues; oppId = opponent's persona id.
-function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId) {
+// glaze = both fighters are on the SAME side → hype each other instead of fighting.
+function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId, glaze) {
   const v = (vibe === "playful" || vibe === "unhinged") ? vibe : "savage";
   const t = (topic || "this whole thing").trim().replace(/"/g, "").slice(0, 80) || "this whole thing";
   const o = oppName || "champ";
-  const n = rePickFresh(RE.noun[v], "noun" + v);
-  const a = rePickFresh(RE.adj[v], "adj" + v);
-  const an = /^[aeiou]/i.test(n) ? "an" : "a";
+  const an = (n) => /^[aeiou]/i.test(n) ? "an" : "a";
   const key = myKey === "b" ? "b" : "a";
+  const sides = reSides(t);
+  // This fighter's side name (for "X vs Y": the actual side; yes/no for a question;
+  // for a statement, the topic when pro, "hell no" when anti — so glaze lines like
+  // "${c} all day" read correctly for whichever side both allies share).
+  const mySideName = sides.kind === "ab" ? (key === "a" ? sides.a : sides.b)
+    : sides.kind === "yn" ? (key === "a" ? "yes" : "no")
+    : (key === "a" ? t : "hell no");
   // The fighter's side stated as a short clause (so it doesn't just repeat "NO").
   const sideClause = () => {
-    const s = reSides(t);
-    if (s.kind === "ab") { const c = key === "a" ? s.a : s.b, x = key === "a" ? s.b : s.a; return rePickFresh(RE.sideClause.ab, "scab")(c, x); }
-    if (s.kind === "yn") return rePickFresh(RE.sideClause.yn, "scyn")(key === "a", t);
+    if (sides.kind === "ab") { const c = key === "a" ? sides.a : sides.b, x = key === "a" ? sides.b : sides.a; return rePickFresh(RE.sideClause.ab, "scab")(c, x); }
+    if (sides.kind === "yn") return rePickFresh(RE.sideClause.yn, "scyn")(key === "a", t);
     return rePickFresh(RE.sideClause.st, "scst")(key === "a", t);
+  };
+  // The fighter's side stated as a "fact"/argument (appeal to data/experts/receipts).
+  const factClause = () => {
+    if (sides.kind === "ab") { const c = key === "a" ? sides.a : sides.b, x = key === "a" ? sides.b : sides.a; return rePickFresh(RE.fact.ab, "fcab")(c, x); }
+    if (sides.kind === "yn") return rePickFresh(RE.fact.yn, "fcyn")(key === "a", t);
+    return rePickFresh(RE.fact.st, "fcst")(key === "a", t);
   };
   // A jab at the OPPONENT's actual character (Sherlock mocking Joe's podcast, etc.).
   const jab = () => rePickFresh((oppId && RE.persona[oppId]?.mock) || RE.mockGeneric, "jab-" + (oppId || "x"));
 
-  let body;
-  const r = Math.random();
-  if (oppModel && selfModel && oppModel !== selfModel && r < 0.12) {
-    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL (rare)
-  } else if (r < 0.86) {
-    body = `${sideClause()}, ${o} — ${jab()}`;                    // MOST: argue the topic + roast their character
-  } else if (r < 0.93) {
-    body = `${jab()}, ${o}`;                                      // occasional pure character roast
-  } else {
-    body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);  // generic, for variety
-  }
-  // Opener: the speaker's OWN voice (keeps them in character), or a reply opener.
-  let opener = (isReply && Math.random() < 0.35)
-    ? rePickFresh(RE.replyOpen, "reply")
-    : rePickFresh(RE.persona[personaId]?.open || ["Listen,"], "open-" + personaId);
-  // Unhinged: weave a swear right after the voice opener (keeps the voice AND curses).
-  if (vibe === "unhinged" && Math.random() < 0.85) {
-    const sw = rePickFresh(RE.swear, "swear");
-    opener = /[.!?]$/.test(opener) ? `${opener} ${reCap(sw)},` : `${opener} ${sw},`;
-  }
-  const tail = /[.!?]$/.test(opener) ? reCap(body) : body;
-  let line = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
-  if (!/[.!?]$/.test(line)) line += ".";
-  // Unhinged intensity: ~55% tack on a swear-burst ender.
-  if (vibe === "unhinged" && Math.random() < 0.55) line += " " + rePickFresh(RE.ender, "ender");
+  // Build one candidate line (opener + body, no emoji/gif). Looped for anti-repeat.
+  const buildOne = () => {
+    let body;
+    const r = Math.random();
+    if (glaze) {
+      // Same side → champion it together and hype the ally (still curses in unhinged).
+      if (r < 0.55) body = rePickFresh(RE.glaze, "glz")(o, mySideName);
+      else if (r < 0.80) body = rePickFresh(RE.glazeGeneric, "glzg")(o);
+      else body = `${factClause()} — and ${o} ${v === "unhinged" ? "fucking " : ""}knows it`;
+    } else if (oppModel && selfModel && oppModel !== selfModel && r < 0.10) {
+      const a = rePickFresh(RE.adj[v], "adj" + v);
+      body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL (rare)
+    } else if (r < 0.40) {
+      body = `${sideClause()}, ${o} — ${jab()}`;                    // argue the topic + roast their character
+    } else if (r < 0.62) {
+      body = `${factClause()}, ${o}`;                               // make a "fact"/argument case
+    } else if (r < 0.80) {
+      body = `${jab()}, ${o}`;                                      // pure character roast
+    } else if (r < 0.90) {
+      body = `${sideClause()}, ${o}`;                               // just argue the side
+    } else {
+      const n = rePickFresh(RE.noun[v], "noun" + v), a = rePickFresh(RE.adj[v], "adj" + v);
+      body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an(n));  // generic
+    }
+    // Opener: glaze → an agreement opener; else the speaker's OWN voice or a reply opener.
+    let opener, shouted = false;
+    if (vibe === "unhinged" && isReply && !glaze && Math.random() < 0.3) {
+      opener = rePickFresh(RE.shutup, "shutup"); shouted = true;   // "Shut the fuck up,"
+    } else if (glaze && Math.random() < 0.5) {
+      opener = rePickFresh(RE.glazeOpen, "glzo");
+    } else {
+      opener = (isReply && Math.random() < 0.35)
+        ? rePickFresh(RE.replyOpen, "reply")
+        : rePickFresh(RE.persona[personaId]?.open || ["Listen,"], "open-" + personaId);
+    }
+    // Unhinged: weave a swear right after the voice opener (keeps the voice AND curses).
+    // Skip if the opener is already a "shut the fuck up" shout (don't double up).
+    if (vibe === "unhinged" && !shouted && Math.random() < 0.85) {
+      const sw = rePickFresh(RE.swear, "swear");
+      opener = /[.!?]$/.test(opener) ? `${opener} ${reCap(sw)},` : `${opener} ${sw},`;
+    }
+    const tail = /[.!?]$/.test(opener) ? reCap(body) : body;
+    let l = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
+    if (!/[.!?]$/.test(l)) l += ".";
+    return l;
+  };
+
+  // Anti-repeat: regenerate if this core line was served recently (bounded retries).
+  let line, core, tries = 0;
+  do { line = buildOne(); core = line.toLowerCase().replace(/[^a-z ]/g, "").trim(); tries++; }
+  while (__reSeen.indexOf(core) !== -1 && tries < 6);
+  __reSeen.push(core); while (__reSeen.length > 14) __reSeen.shift();
+
+  // Unhinged intensity: ~55% tack on a swear-burst ender (but allies don't tell each
+  // other to "sit the fuck down" — skip the hostile ender when glazing).
+  if (vibe === "unhinged" && !glaze && Math.random() < 0.55) line += " " + rePickFresh(RE.ender, "ender");
   line = reCap(line);
   // Trending emoji ~60% of the time.
   if (Math.random() < 0.6) line += " " + rePickFresh(RE.emoji[v], "emoji");
@@ -2193,8 +2272,8 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
   return line;
 }
 // Stream the generated roast word-by-word so it types in like a real message.
-async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, oppId, signal) {
-  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId);
+async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, oppId, glaze, signal) {
+  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel, myKey, oppId, glaze);
   const parts = line.split(/(\s+)/);   // keep whitespace tokens
   for (const p of parts) {
     if (signal?.aborted) return;
@@ -2588,7 +2667,7 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     const selfModel = models[modelId]?.label;
     const oppModelId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightModelId : b.leftModelId);
     const oppModel = oppModelId ? models[oppModelId]?.label : null;
-    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, oppId, controller.signal);
+    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, myKey, oppId, !!b.glaze, controller.signal);
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
