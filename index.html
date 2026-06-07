@@ -1652,6 +1652,10 @@ function validateSetup() {
 async function startBattle() {
   const cfg = validateSetup();
   if (!cfg) return;
+  // Defensively stop any still-running battle so its async turn loop can't bleed
+  // lines (with the OLD topic) into the new thread. Normally unreachable — setup
+  // is hidden mid-battle — but cheap insurance against a double-start race.
+  if (battle) { battle.stopped = true; if (battle.abort) battle.abort.abort(); }
 
   $("setup").style.display = "none";
   $("match").classList.add("active");
@@ -2155,7 +2159,247 @@ const RE = {
   },
   gifq: ["mic drop", "roasted", "oh no he didn't", "shots fired", "savage", "facepalm", "deal with it", "crying laughing", "destroyed", "you got served", "bruh moment", "popcorn"]
 };
+// ─── Topic-aware roast corpus (generated + verified) ──────────────────────────
+// These are the BIG variety win: instead of canned jabs reused for every topic,
+// each line weaves in the actual topic + sides via tokens, so "cats vs dogs" and
+// "pizza vs tacos" produce genuinely different insults. Tokens (filled by reFill):
+//   {T}=topic  {C}=this fighter's side  {X}=opponent's side  {O}=opponent name
+//   {N}=insult noun (vibe)  {A}=insult adjective (vibe)
+// "clean" = playful/savage (no profanity); "unhinged" = real swears woven in.
+// topicPersona[id] = roasts AIMED AT that persona (used vs the OPPONENT's persona).
+RE.topicPersona = {
+  rogan: {
+    clean: [
+      `You'd need a 3-hour podcast and a DMT trip to still land on {X} for {T}, {O}, and even then Jamie couldn't pull up your reasoning.`,
+      `Picking {X} over {C} is the kind of take you only reach in hour two of an ice bath when the blood's left your brain, {O}.`,
+      `Sir, no amount of elk meat and cold plunges is gonna give you the testosterone to defend {X} in {T}.`,
+      `You shill mushroom powder to ten million people but somehow can't supplement your way out of believing {X} beats {C}, {O}.`,
+      `That's a wild take, man, the kind of {A} {X} opinion on {T} you'd nod along to while a stranger explains ayahuasca for ninety minutes.`,
+      `Choking out a black belt is easier than choking down your argument that {X} wins {T}, {O}.`,
+      `Even your most chemically-enhanced guest would tap out before agreeing that {X} is better than {C}, {O}.`,
+      `It's entirely possible {C} is correct and {X} is for losers, but have you considered that on {T} you are just plain wrong, {O}?`
+    ],
+    unhinged: [
+      `No shit you picked {X} for {T}, {O}, your brain's been a fucking ice bath since 2019 and the only thing that thaws is the supplement pitch.`,
+      `Jamie, pull that up, because {O} just claimed {X} beats {C} and not one fucking source survived the DMT.`,
+      `Take all the testosterone you want, {O}, it still won't make defending {X} on {T} anything but pure dogshit.`,
+      `Your whole {X} argument on {T} smells like alpha-brain pills and burnt sage, and frankly so does the rest of your fucking studio, {O}.`,
+      `Hour three, sweating out the sauna, and the deepest thought {O} can muster on {T} is that {X} is somehow not complete dogshit.`
+    ]
+  },
+  sherlock: {
+    clean: [
+      `You "deduced" that {X} wins {T}? Watson, fetch the magnifying glass, {O} has finally observed something stupid.`,
+      `Only a man who lives alone with a violin and a cocaine habit could look at {T} and side with {X}.`,
+      `The great detective cracks murders but can't solve {T}, defending {X} like the evidence isn't screaming {C}.`,
+      `You needed a deerstalker hat and three pipes to arrive at {X}, and the answer was {C} the whole time, {O}.`,
+      `Elementary, my dear {O}: a Victorian shut-in with zero friends should not be the one ruling on {T}.`,
+      `Backing {X} on {T} is the kind of cold, friendless logic that explains why nobody but Watson tolerates you.`,
+      `Sitting in your foggy London flat high on cocaine is the only state of mind where {X} beats {C} in {T}.`,
+      `Is choosing {X} over {C} a deduction, or just the brain damage from a century of pipe smoke talking, {O}?`,
+      `Your cold detective logic crunched {T} and spat out {X}, which proves the genius is a fraud and {C} wins, {O}.`
+    ],
+    unhinged: [
+      `You're so fucking pleased with yourself for "deducing" {X} on {T} that you forgot the whole point was {C}, you smug Victorian fossil.`,
+      `Take the magnifying glass out of your ass and you'd see {C} obliterates {X} in {T}, you cocaine-addled freak.`,
+      `The only mystery here is how a friendless prick like you looked at {T} and picked {X} instead of the painfully obvious {C}.`,
+      `Watson would be embarrassed as shit watching you defend {X} on {T}, {O}, and Watson is the only friend you've got.`,
+      `You solved every fucking murder in London but choked on {T}, siding with {X} like {C} left no goddamn footprints.`,
+      `Elementary, {O}: any inbred who picks {X} over {C} in {T} belongs back in his foggy shithole flat with his violin.`,
+      `Crawl back to Baker Street and shoot up, {O}, because that's the only way defending {X} over {C} in {T} makes any fucking sense.`
+    ]
+  },
+  stoic: {
+    clean: [
+      `No amount of stoic breathing fixes a {T} take as joyless as picking {X}, {O}.`,
+      `You quote Marcus Aurelius like it's gonna make defending {X} over {C} any less embarrassing, {O}.`,
+      `Imagine meditating for twenty years just to arrive at the wrong answer on {T}, {O}.`,
+      `The Stoics taught you to accept what you cannot change, {O}, which explains why you've given up trying to defend {X}.`,
+      `Is it inner peace or is it just that {C} is so obviously right you've stopped feeling anything, {O}?`,
+      `You suppressed every emotion you've ever had and somehow the one that survived was a passion for {X}, {O}.`,
+      `A real philosopher would've reasoned his way to {C}, but you marble-statued your way into the {X} corner instead, {O}.`,
+      `Marcus Aurelius wrote a whole book on virtue and you used it as a coaster while choosing {X} on {T}, {O}.`,
+      `You confuse having no personality with having discipline, which is the only way anyone ends up backing {X} over {C}, {O}.`
+    ],
+    unhinged: [
+      `No fucking journal entry about the impermanence of life is gonna resurrect your dead-on-arrival {X} take, {O}.`,
+      `You meditate four hours a day to stay calm and you still couldn't reason your dumb ass past {X} to the {C} that's right in front of you, {O}.`,
+      `That's not stoic detachment {O}, that's just what shitty {T} opinions sound like when the guy holding {X} has no soul left.`,
+      `You're so emotionally constipated you mistook the cold dread of being wrong about {T} for enlightenment, {O}.`,
+      `Keep telling yourself the obstacle is the way, {O}, because the obstacle here is that {X} is a {A} hill and you're dying on it like a fucking martyr.`,
+      `Epictetus said control what you can, and the one thing your sorry ass couldn't control was the urge to defend {X} over {C}, {O}.`,
+      `All that ancient wisdom rattling around your skull and it still couldn't stop you from shitting out a {X} take this {A}, {O}.`,
+      `You sit cross-legged whispering about virtue while picking {X} on {T}, you absolute marble-faced {N}, {O}.`,
+      `The unexamined life isn't worth living, but the examined one apparently still lands you on {X} instead of {C}, so what the fuck was the point, {O}?`
+    ]
+  },
+  infomercial: {
+    clean: [
+      `Your case for {X} on {T} is the kind of garbage you can only move at 2am for four easy payments of nothing, {O}.`,
+      `But WAIT, there's more {N} energy from {O}, who'd slap a limited-time sticker on {X} just to unload it on {T}.`,
+      `You're pitching {X} like it's a miracle, {O}, but nobody on {T} is reaching for their phone to call this number.`,
+      `Defending {X} so hard you'd sell ice to a penguin, and that penguin still picks {C} over your {A} sales pitch.`,
+      `Act now and {O} will throw in a SECOND helping of being wrong about {T}, absolutely free.`,
+      `Only a 2am infomercial brain could look at {C} and try to upsell the room on {X} instead, {O}.`,
+      `That argument for {X} comes with a money-back guarantee, and on {T} everyone in the audience wants the refund.`,
+      `You'd need three split-screens and a fake studio crowd to make {X} look good next to {C}, {O}.`,
+      `Operators are standing by, {O}, and not a single one will cosign your {A} take that {X} beats {C}.`
+    ],
+    unhinged: [
+      `Holy shit {O}, you're hawking {X} like a busted blender at 3am while {C} just walked off with the whole fucking show.`,
+      `But WAIT, there's more bullshit, because {O} will toss in a free reason {X} is dogshit at no extra charge on {T}.`,
+      `You couldn't sell {X} on {T} for free with a fucking spotlight on it, so why are you screaming about it like a {A} late-night clown, {O}?`,
+      `This is the shittiest 2am pitch I've ever seen, {O}, nobody is dialing the number for your {X} when {C} is right fucking there.`,
+      `Act now and {O} throws in a free bullshit guarantee that {X} wins {T}, batteries and brain cells not included.`,
+      `You hype {X} like it slices, it dices, it does your fucking taxes, but on {T} it just sits there being {A} next to {C}.`,
+      `Quit your goddamn QVC monologue, {O}, because no infomercial in hell could move a {A} product like {X} over {C}.`,
+      `That's not a debate take, {O}, that's a 2am scam, and even the desperate insomniacs aren't buying your shit about {T}.`
+    ]
+  }
+};
+// Generic topic-aware roasts (any opponent) — the bulk of the variety.
+RE.topic = {
+  clean: [
+    `Arguing {X} on {T} is like bringing a damp sock to a sword fight and calling it strategy.`,
+    `You'd lose the {T} debate to a Roomba that got stuck under the couch and gave up.`,
+    `Picking {X} over {C} has the intellectual depth of a kiddie pool with a slow leak.`,
+    `Defending {X} on {T} is like proudly mowing your driveway while the lawn screams.`,
+    `Backing {X} instead of {C} is the cognitive equivalent of trusting a magic 8-ball to do your taxes.`,
+    `On {T}, your reasoning has the structural integrity of a wet paper bridge in a hurricane.`,
+    `Choosing {X} over {C} is like reading the {T} instructions, lighting them on fire, and eating the ashes.`,
+    `Your defense of {X} on {T} is like a GPS that confidently routes you straight into a lake.`,
+    `You defend {X} in the {T} debate like it's the only thing keeping your spine upright.`,
+    `You ride for {X} on {T} harder than a kid defending a sandcastle as the tide comes in.`,
+    `You'd take a bullet for {X} in the {T} argument, and somehow that's the saddest fact about you, not the bravest.`,
+    `Watching you cling to {X} over {C} is like watching someone hug a vending machine that already ate their money.`,
+    `You clutch {X} so tight every time {T} comes up that I'm worried {O} is the only thing prying your fingers loose.`,
+    `Why do you guard {X} in the {T} fight like a dragon guarding a single sad coin while {C} sits there obviously richer?`,
+    `You'll go down with the {X} ship on {T}, captain, but nobody told you {C} already reached the lifeboats.`,
+    `You wear your love for {X} on {T} like a badge, except it's the kind of badge {O} keeps trying to confiscate.`,
+    `You defend {X} on {T} with the unearned confidence of a {N} who's never once been right about anything.`,
+    `You'd tattoo {X} on your chest over the {T} debate, which is wild commitment for a take this {A}.`,
+    `How do you wake up, look at {T}, and somehow choose {X} like that's a normal thing a functioning brain does?`,
+    `Who hurt you so badly that you genuinely believe {X} beats {C} on {T}?`,
+    `Be honest, did you put even one second of thought into {T} before blurting out {X}?`,
+    `What part of {T} convinced you that {X} was the hill worth dying on instead of just admitting {C} won?`,
+    `Do you defend {X} on {T} for a reason, or is being this confidently wrong just your personality?`,
+    `When the topic is {T} and you reach for {X}, do you ever stop and wonder why {C} fans are laughing at you?`,
+    `Is choosing {X} on {T} a take, or is it a cry for help that {C} keeps having to answer?`,
+    `Riddle me this {O}, what does {X} have on {T} besides you and the seven other people who got it wrong?`,
+    `{C} ends the {T} debate before {O} even finishes clearing their throat.`,
+    `Everyone with a functioning brain stem already picked {C} over {X} and moved on with their lives.`,
+    `Choosing {X} in {T} is the participation trophy of opinions, and {C} is the actual gold.`,
+    `{C} is the only correct answer to {T}, and somewhere deep down {O} knows it.`,
+    `The case for {C} fits on a napkin; the case for {X} needs {O} crying into one.`,
+    `Picking {X} over {C} is like reading the answer key and still circling the wrong box.`,
+    `There are two kinds of people in the {T} debate: {C} enjoyers, and people I feel sorry for.`,
+    `{C} didn't win the {T} argument, it just showed up and {X} dissolved on contact.`,
+    `{C} laps {X} so hard in {T} that {O} is technically arguing for last place.`,
+    `{C} settled {T} a long time ago, and {O} is out here defending {X} like a flat earther with extra steps.`,
+    `{T} is easy: {C}. and you still picked {X}, {O}, which is genuinely impressive in the worst way.`,
+    `the whole {T} debate took me two seconds: {C}. it took you {O} a lifetime to land on {X} and you're STILL wrong.`,
+    `{X}? the answer to {T} is {C}, and the fact that I have to explain that to a grown adult is its own tragedy.`,
+    `picking {X} on {T} is a choice, sure, the same way walking into traffic is a choice.`,
+    `{T} has exactly one right answer and it's {C}, so watching {O} defend {X} is like watching someone lose a coin flip they called.`,
+    `{X}? cute opener, shame about the part where everything after it was wrong.`,
+    `{C} wins {T} before anyone speaks, so every word you waste on {X} is just you digging the hole deeper, {O}.`,
+    `Every peer-reviewed study on {T} lands on {C} and quietly buries {X} in the footnotes.`,
+    `Ask any expert alive about {T} and watch them pick {C} before you finish the sentence, while {X} gets a pity nod at best.`,
+    `The data on {C} versus {X} came back so lopsided the researchers assumed the printer was broken.`,
+    `Ninety-seven percent of people who actually understand {T} side with {C}, and the other three percent are {O}.`,
+    `The science settled {T} years ago in favor of {C}, so explain why you're still campaigning for {X}.`,
+    `Every credible source on {T} reads like a love letter to {C} and a restraining order against {X}.`,
+    `The historical record on {T} is a straight line from {X} losing to {C} winning, and you're arguing with a timeline.`,
+    `Statistically, defending {X} over {C} puts you in the same bracket as people who think the earth is flat.`,
+    `The numbers on {T} are so overwhelmingly pro-{C} that {X} doesn't even qualify for the margin of error.`,
+    `The consensus on {C} versus {X} is so total that picking {X} should legally count as failing a science exam.`
+  ],
+  unhinged: [
+    `Riding for {X} over {C} is like a goldfish trying to fucking parallel park a school bus.`,
+    `Your {T} argument has the IQ of a screen door on a goddamn submarine.`,
+    `Choosing {X} over {C} is like setting yourself on fire to prove the fucking ocean is wet.`,
+    `You ride for {X} on {T} so fucking hard you'd let it ruin your marriage before you'd admit {C} has a point.`,
+    `You cling to {X} in the {T} argument like it's the last shitty floatation device on a sinking boat, and {C} is the goddamn shore.`,
+    `You'd take a bullet for {X} on {T}, and the truly fucked part is the bullet would still be smarter than your position.`,
+    `Why the hell do you white-knuckle {X} over {C} on {T} like {O} is gonna mug you for the privilege of being this wrong?`,
+    `You defend {X} in the {T} fight with the energy of a {A} drunk arguing with a stop sign, and the stop sign is {C}.`,
+    `You ride or die for {X} on {T} so hard it stopped being loyalty and became a fucking hostage situation.`,
+    `You'd burn the whole house down before letting go of {X} in the {T} debate, you absolute {N}, while {C} just walks out the front door.`,
+    `You hug {X} on {T} so damn tight that even {O} is begging you to let the poor opinion breathe.`,
+    `How the fuck do you sit there on {T} and pick {X} when {C} is right in front of your stupid face?`,
+    `Who let you anywhere near {T} with a take as shit as defending {X} over {C}?`,
+    `Why the hell would anyone choose {X} on {T} when {C} would beat your sorry ass blindfolded?`,
+    `Does it not embarrass the shit out of you that your whole stance on {T} is just screaming {X} and hoping?`,
+    `What kind of {A} fucking logic looks at {C} on {T} and goes nah, I'll ride for {X}?`,
+    `Tell me {O}, when you wake up and pick {X} on {T}, do you even hear how much of a {N} you sound like?`,
+    `Is your defense of {X} on {T} an actual argument, or just the dumbest shit your mouth could find that day?`,
+    `How does it feel knowing {C} already won {T} and you're out here defending {X} like a lost fucking tourist?`,
+    `{C} is the right answer to {T} and {X} is the answer your dumbass cousin defends at Thanksgiving.`,
+    `Nobody with a single working brain cell picks {X} over {C}, so congrats {O}, you're the damn control group.`,
+    `{C} ends the whole {T} debate before it starts, and {X} is just {O} losing in slow fucking motion.`,
+    `Defending {X} in {T} is the most {A} hill to die on, and {C} already pissed on the grave.`,
+    `The {T} debate isn't close, it's {C} in a Ferrari and {O} pushing {X} uphill with their goddamn teeth.`,
+    `Every adult chose {C} over {X} years ago, and {O} is still in the parking lot arguing with the fucking ghost of {X}.`,
+    `{C} is so obviously the right call in {T} that picking {X} should come with a {A} damn warning label.`,
+    `{X}? on {T}? no fucking notes needed, that's just the dumbest thing said out loud today.`,
+    `{T} is piss-easy: {C}. and you STILL fumbled it for {X}, {O}, which takes a special kind of stupid.`,
+    `you really showed up to defend {X} on {T}? holy shit, the confidence-to-competence ratio is fucking criminal.`,
+    `the answer to {T} is {C}, full stop, so every breath you spend on {X} is just you advertising how fucking lost you are.`,
+    `{X}? on {T}? short version: no. long version: no, you absolute {N}.`,
+    `{C} settles {T} in one word, but here's {O} writing a whole shit-stained essay defending {X} like it'll bring it back.`,
+    `choosing {X} over {C} on {T} isn't a take, {O}, it's a fucking cry for help.`,
+    `{T}? {C}. done. and the fact that you're still mumbling {X} over there is the funniest shit I've seen all week, {O}.`,
+    `{X} on {T}? I gave that argument three seconds and it still wasted two of my fucking minutes.`,
+    `Every goddamn stat on {T} backs {C}, and {X} doesn't even crack the bottom of the fucking spreadsheet.`,
+    `Ask any expert alive and {C} clears {X} so hard the study comes with a fucking obituary attached.`,
+    `There isn't a single peer-reviewed paper backing {X} over {C}, because nobody wastes ink on {A} bullshit.`,
+    `Every metric that matters on {T} screams {C}, so why the fuck are you still defending {X} like it has a pulse?`,
+    `how the FUCK do you wake up, look at {T}, and confidently land on {X} like that's a personality and not a cry for help`,
+    `defending {X} in {T} is the kind of brain damage they should study in a fucking lab, {O}`,
+    `{O} really chose {X} and expects applause when the only correct answer in {T} has always been {C}, you absolute fucking walnut`,
+    `every shitty take you've ever had peaked the second you picked {X} over {C}, and somehow {T} made it WORSE`,
+    `I've seen roadkill argue {T} better than you defend {X}, so shut the fuck up and let {C} cook`,
+    `what part of {C} being right about {T} is so hard that your dumb ass keeps crawling back to {X}`,
+    `{X} is a fucking joke and the punchline is your whole face, which is why {C} runs {T} rent-free`,
+    `you'd lose a debate about {T} to a fucking brick, and the brick would be holding {C} while you fumble {X} like a clown`,
+    `imagine being so wrong about {T} that picking {X} becomes your entire goddamn legacy, {O}`,
+    `{O} out here defending {X} like {C} didn't already bury that shit take six feet under in the {T} graveyard`,
+    `the fact that {X} exists as your answer to {T} tells me your brain is running on fucking fumes and spite`,
+    `every single neuron you have left voted for {X}, and that's exactly why your dumb ass will never understand why {C} owns {T}`,
+    `siding with {X} on {T} is a war crime against common sense and your dumb ass should be on trial for it`,
+    `name ONE good thing {X} brings to {T}, I'll wait, meanwhile {C} is over here lapping your sorry ass`,
+    `you scream about {X} like {T} is yours to lose, but {C} has been kicking your ass since before you learned to talk`,
+    `{X} is so fucking indefensible that watching {O} try is genuinely the saddest thing to happen to {T}`,
+    `your take on {T} is what happens when {X} and a fucking concussion have a baby, and {C} raised it better`,
+    `keep clutching {X} like a security blanket, {O}, because the second {T} gets real, {C} eats your whole shit`
+  ]
+};
+// Same-side GLAZE, topic-aware: hype the ally while championing the shared side {C}.
+RE.topicGlaze = {
+  clean: [
+    `See, {O} gets it — {C} is the only sane answer to {T} and everyone else is just catching up.`,
+    `Somebody hand {O} a medal, because backing {C} on {T} is the single smartest take I've heard all day.`,
+    `When {O} stands up for {C}, you can physically watch the debate over {T} end.`,
+    `You ever notice how {O} and I both landed on {C} for {T}? That's not luck, that's taste.`,
+    `Give it up for {O}, the only other person in this debate over {T} with the spine to say {C} out loud.`
+  ],
+  unhinged: [
+    `{O} you magnificent bastard, you nailed it — {C} all day on {T} and not a single fuck given to anyone who disagrees.`,
+    `Hell yeah {O}, {C} is the right call on {T} and the haters can go cry about it.`,
+    `Me and {O} are so fucking correct about {C} on {T} they should just cancel the rest of this debate.`,
+    `{O} out here defending {C} on {T} like a goddamn hero while everyone else fumbles the obvious.`,
+    `Big shoutout to {O} for proving I'm not crazy — {C} really is the move on {T}, every damn time.`
+  ]
+};
 function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
+// Fill a topic-aware template's tokens in a SINGLE pass (so a topic that itself
+// contains "{X}" etc. can't get re-substituted, and a literal "$" in the topic is
+// inert because the replacement is a function, not a $-pattern string).
+function reFill(tpl, ctx) {
+  return tpl.replace(/\{([TCXONA])\}/g, (m, k) =>
+    k === "T" ? ctx.T : k === "C" ? ctx.C : k === "X" ? ctx.X :
+    k === "O" ? ctx.O : k === "N" ? ctx.N() : k === "A" ? ctx.A() : m);
+}
 // Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
 const __reRecent = {};
 function rePickFresh(arr, key) {
@@ -2197,12 +2441,18 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
   const an = (n) => /^[aeiou]/i.test(n) ? "an" : "a";
   const key = myKey === "b" ? "b" : "a";
   const sides = reSides(t);
-  // This fighter's side name (for "X vs Y": the actual side; yes/no for a question;
-  // for a statement, the topic when pro, "hell no" when anti — so glaze lines like
-  // "${c} all day" read correctly for whichever side both allies share).
-  const mySideName = sides.kind === "ab" ? (key === "a" ? sides.a : sides.b)
-    : sides.kind === "yn" ? (key === "a" ? "yes" : "no")
-    : (key === "a" ? t : "hell no");
+  // Each fighter's side as a short NAME (cats / dogs / yes / no) for token-filling.
+  const sideNameFor = (k) => sides.kind === "ab" ? (k === "a" ? sides.a : sides.b) : (k === "a" ? "yes" : "no");
+  // Fill context for the topic-aware templates — THIS is what makes every topic's
+  // insults different ({T}/{C}/{X}/{O} get the real topic, sides, and opponent).
+  const ctx = {
+    T: t, O: o,
+    C: sideNameFor(key),
+    X: sideNameFor(key === "a" ? "b" : "a"),
+    N: () => rePickFresh(RE.noun[v], "noun" + v),
+    A: () => rePickFresh(RE.adj[v], "adj" + v)
+  };
+  const set = v === "unhinged" ? "unhinged" : "clean";   // which corpus tier to draw from
   // The fighter's side stated as a short clause (so it doesn't just repeat "NO").
   const sideClause = () => {
     if (sides.kind === "ab") { const c = key === "a" ? sides.a : sides.b, x = key === "a" ? sides.b : sides.a; return rePickFresh(RE.sideClause.ab, "scab")(c, x); }
@@ -2220,46 +2470,58 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
 
   // Build one candidate line (opener + body, no emoji/gif). Looped for anti-repeat.
   const buildOne = () => {
-    let body;
+    let body, standalone = false;   // standalone = a full topic line that can skip the opener
     const r = Math.random();
     if (glaze) {
-      // Same side → champion it together and hype the ally (still curses in unhinged).
-      if (r < 0.55) body = rePickFresh(RE.glaze, "glz")(o, mySideName);
-      else if (r < 0.80) body = rePickFresh(RE.glazeGeneric, "glzg")(o);
-      else body = `${factClause()} — and ${o} ${v === "unhinged" ? "fucking " : ""}knows it`;
-    } else if (oppModel && selfModel && oppModel !== selfModel && r < 0.10) {
-      const a = rePickFresh(RE.adj[v], "adj" + v);
-      body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL (rare)
-    } else if (r < 0.40) {
-      body = `${sideClause()}, ${o} — ${jab()}`;                    // argue the topic + roast their character
-    } else if (r < 0.62) {
-      body = `${factClause()}, ${o}`;                               // make a "fact"/argument case
-    } else if (r < 0.80) {
-      body = `${jab()}, ${o}`;                                      // pure character roast
-    } else if (r < 0.90) {
-      body = `${sideClause()}, ${o}`;                               // just argue the side
+      // Same side → hype the ally (topic-aware first, then the short hype lines).
+      const tg = RE.topicGlaze[set];
+      if (tg && tg.length && r < 0.7) { body = reFill(rePickFresh(tg, "tgl" + set), ctx); standalone = true; }
+      else if (r < 0.9) body = rePickFresh(RE.glaze, "glz")(o, ctx.C);
+      else body = rePickFresh(RE.glazeGeneric, "glzg")(o);
+    } else if (oppModel && selfModel && oppModel !== selfModel && r < 0.08) {
+      body = rePickFresh(RE.mjab, "mjab")(oppModel, o, ctx.A());     // roast the opponent's MODEL (rare)
     } else {
-      const n = rePickFresh(RE.noun[v], "noun" + v), a = rePickFresh(RE.adj[v], "adj" + v);
-      body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an(n));  // generic
+      // Topic-aware templates DOMINATE (~64%) so each topic reads differently.
+      const tp = oppId && RE.topicPersona[oppId] && RE.topicPersona[oppId][set];
+      if (tp && tp.length && r < 0.34) { body = reFill(rePickFresh(tp, "tp" + oppId + set), ctx); standalone = true; }   // topic + opponent's persona
+      else if (r < 0.72) { body = reFill(rePickFresh(RE.topic[set], "tt" + set), ctx); standalone = true; }              // topic, generic
+      else if (r < 0.82) body = `${factClause()}, ${o}`;             // a "fact"/argument case
+      else if (r < 0.90) body = `${sideClause()}, ${o} — ${jab()}`; // argue the side + character jab
+      else if (r < 0.96) body = `${jab()}, ${o}`;                   // pure character jab
+      else { const n = rePickFresh(RE.noun[v], "noun" + v); body = rePickFresh(RE.body, "body")(t, o, n, rePickFresh(RE.adj[v], "adj" + v), rePickFresh(RE.since, "since"), an(n)); }
     }
-    // Opener: glaze → an agreement opener; else the speaker's OWN voice or a reply opener.
-    let opener, shouted = false;
-    if (vibe === "unhinged" && isReply && !glaze && Math.random() < 0.3) {
-      opener = rePickFresh(RE.shutup, "shutup"); shouted = true;   // "Shut the fuck up,"
-    } else if (glaze && Math.random() < 0.5) {
+    // Opener: shout (unhinged) / agreement (glaze) / sometimes none for a full topic
+    // line / else the speaker's OWN persona voice or a reply opener.
+    let opener = null, shouted = false;
+    if (vibe === "unhinged" && isReply && !glaze && Math.random() < 0.22) {
+      opener = rePickFresh(RE.shutup, "shutup"); shouted = true;     // "Shut the fuck up,"
+    } else if (glaze && Math.random() < 0.45) {
       opener = rePickFresh(RE.glazeOpen, "glzo");
+    } else if (standalone && Math.random() < 0.45) {
+      opener = null;                                                 // topic line stands alone (variety)
     } else {
       opener = (isReply && Math.random() < 0.35)
         ? rePickFresh(RE.replyOpen, "reply")
         : rePickFresh(RE.persona[personaId]?.open || ["Listen,"], "open-" + personaId);
     }
+    if (!opener) {
+      let l = reCap(body.trim());
+      if (!/[.!?]$/.test(l)) l += ".";
+      return l;
+    }
     // Unhinged: weave a swear right after the voice opener (keeps the voice AND curses).
     // Skip if the opener is already a "shut the fuck up" shout (don't double up).
-    if (vibe === "unhinged" && !shouted && Math.random() < 0.85) {
+    if (vibe === "unhinged" && !shouted && Math.random() < 0.8) {
       const sw = rePickFresh(RE.swear, "swear");
       opener = /[.!?]$/.test(opener) ? `${opener} ${reCap(sw)},` : `${opener} ${sw},`;
     }
-    const tail = /[.!?]$/.test(opener) ? reCap(body) : body;
+    // Join, fixing capitalization across the opener→body seam (don't lowercase a
+    // name like {O} or an ALL-CAPS word; do lowercase a normal capitalized word).
+    let tail;
+    if (/[.!?]$/.test(opener)) tail = reCap(body);
+    else if (body.startsWith(o) || /^[A-Z]{2,}/.test(body)) tail = body;
+    else if (/^[A-Z][a-z]/.test(body)) tail = body.charAt(0).toLowerCase() + body.slice(1);
+    else tail = body;
     let l = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
     if (!/[.!?]$/.test(l)) l += ".";
     return l;
