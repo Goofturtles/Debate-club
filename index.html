@@ -1004,8 +1004,8 @@
 <footer>Built for the group chat.</footer>
 
 <script type="module">
-import { personas } from "/personas.js";
-import { models, providers } from "/models.js";
+import { personas } from "./personas.js";
+import { models, providers } from "./models.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_TURNS = 10;
@@ -1020,6 +1020,10 @@ const RENDER_CHUNK   = 2;
 // Pause between AI-vs-AI turns so the audience can actually read each line.
 const READ_PAUSE_MIN_MS = 5000;
 const READ_PAUSE_VAR_MS = 4000;   // 5–9s of reading time per message
+
+// Cloud models are called DIRECTLY from the browser (no backend needed — works
+// on GitHub Pages / any static host). This is the per-reply length cap.
+const MAX_TOKENS_CLIENT = 40;
 
 // Tenor's public anonymous demo key — keyless GIF search, works for everyone.
 const TENOR_KEY = "LIVDSRZULELA";
@@ -1603,7 +1607,7 @@ async function runAiVsAi(b) {
     catch (err) { typingEl.remove(); if (!b.stopped) appendSystemMessage(`Stream error: ${humanizeError(err)}`); break; }
     if (b.stopped && !text.trim()) { typingEl.remove(); break; }
     if (text.trim()) b.history.push({ persona_id: sp.personaId, content: text.trim() });
-    else if (!b.stopped) { typingEl.remove(); appendSystemMessage("(silence) — check your API key and the server logs."); break; }
+    else if (!b.stopped) { typingEl.remove(); appendSystemMessage("(silence) — check your API key in Settings, or try a different model."); break; }
 
     if (b.history.length >= max || b.stopped) break;
 
@@ -1828,26 +1832,10 @@ function buildConversationFromPOV(personaId, topic, history) {
   return messages;
 }
 
-async function* streamFromServer(b, personaId, modelId, signal, systemPrompt) {
-  const apiKey = keyForModel(modelId);
-  let response;
-  try {
-    response = await fetch("/api/debate", {
-      method: "POST", headers: { "content-type": "application/json" },
-      // `system` carries the fully-assembled prompt (persona + rules + stance + vibe)
-      // so the server doesn't need its own copy of stance/vibe logic.
-      body: JSON.stringify({ topic: b.topic, persona_id: personaId, model_id: modelId, api_key: apiKey, history: b.history, system: systemPrompt }),
-      signal
-    });
-  } catch (err) {
-    if (err.name === "AbortError") return;
-    throw new Error(`Network error: ${err.message || "failed to fetch"} (is the server running?)`);
-  }
-  if (!response.ok) {
-    let detail = ""; try { detail = (await response.json()).error || ""; } catch {}
-    throw new Error(detail || `HTTP ${response.status}`);
-  }
-  const reader = response.body.getReader();
+// Generic SSE reader → yields text deltas. `extract(parsedJSON)` returns the
+// text chunk for that provider's event shape, or null to skip.
+async function* readSSE(body, signal, extract) {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   while (true) {
@@ -1860,15 +1848,64 @@ async function* streamFromServer(b, personaId, modelId, signal, systemPrompt) {
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
       const data = line.slice(6).trim();
-      if (!data) continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.error) throw new Error(parsed.error);
-        if (parsed.text) yield parsed.text;
-        if (parsed.done) return;
-      } catch (e) { if (e.message && !/JSON/.test(e.message)) throw e; }
+      if (!data || data === "[DONE]") continue;
+      let parsed; try { parsed = JSON.parse(data); } catch { continue; }
+      const t = extract(parsed);
+      if (t) yield t;
     }
   }
+}
+
+// Call the AI provider DIRECTLY from the browser — no backend, so this works on
+// GitHub Pages / any static host. Uses the user's own key from their browser
+// (the same key never leaves their machine except to the provider they chose).
+async function* streamCloudDirect(provider, model, systemPrompt, messages, apiKey, signal) {
+  if (!apiKey) throw new Error("Missing API key — add one in Settings.");
+  const label = provider === "anthropic" ? "Claude" : provider === "openai" ? "GPT" : "Gemini";
+  let resp;
+  try {
+    if (provider === "anthropic") {
+      resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", signal,
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ model, max_tokens: MAX_TOKENS_CLIENT, system: systemPrompt, messages, stream: true })
+      });
+    } else if (provider === "openai") {
+      resp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST", signal,
+        headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ model, max_tokens: MAX_TOKENS_CLIENT, stream: true, messages: [{ role: "system", content: systemPrompt }, ...messages] })
+      });
+    } else if (provider === "google") {
+      const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+      resp = await fetch(url, {
+        method: "POST", signal,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents, generationConfig: { maxOutputTokens: MAX_TOKENS_CLIENT } })
+      });
+    } else {
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    throw new Error(`Couldn't reach ${label}: ${err.message || "failed to fetch"}`);
+  }
+  if (!resp.ok) {
+    let detail = "";
+    try { const j = JSON.parse(await resp.text()); detail = j?.error?.message || j?.error?.error?.message || j?.message || ""; } catch {}
+    throw new Error(`${label} ${resp.status}${detail ? " — " + detail : ""}`);
+  }
+  const extract =
+    provider === "anthropic" ? (d) => (d.type === "content_block_delta" && d.delta?.text) ? d.delta.text : null :
+    provider === "openai"    ? (d) => d?.choices?.[0]?.delta?.content || null :
+                               (d) => { const p = d?.candidates?.[0]?.content?.parts; return (p && p[0]?.text) ? p[0].text : null; };
+  yield* readSSE(resp.body, signal, extract);
 }
 
 // ─── On-device (Chrome AI) ───────────────────────────────────────────
@@ -1975,13 +2012,15 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
   const persona = personas[personaId];
   if (!persona) throw new Error(`Unknown persona: ${personaId}`);
   const systemPrompt = buildSystemPrompt(persona, stance, b.vibe);
+  const convo = buildConversationFromPOV(personaId, b.topic, b.history);
   const side = typingEl.classList.contains("right") ? "right" : "left";
 
   let tokenSource;
   if (isOnDeviceModel) {
-    tokenSource = streamOnDevice(systemPrompt, buildConversationFromPOV(personaId, b.topic, b.history), controller.signal);
+    tokenSource = streamOnDevice(systemPrompt, convo, controller.signal);
   } else {
-    tokenSource = await streamFromServer(b, personaId, modelId, controller.signal, systemPrompt);
+    // Cloud models: call the provider straight from the browser (no backend).
+    tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);
   }
 
   let bubbleEl = null, renderedText = "", pendingText = "", streamDone = false, renderInterval = null;
