@@ -3037,8 +3037,10 @@ async function* streamSmartDebateAI(systemPrompt, convo, key, signal, engineGen)
     it = streamCloudDirect("google", DEBATE_AI_GEMINI_MODEL, systemPrompt, convo, key, signal)[Symbol.asyncIterator]();
     // Race the first token against a timeout so a STALLED connection (accepted but
     // silent) can't hang the default model — fall back to the instant engine.
+    const firstTok = it.next();                   // surfaces auth/network/CORS/rate errors up front
+    firstTok.catch(() => {});                      // if the timeout wins, don't leave this orphaned (no unhandledrejection)
     step = await Promise.race([
-      it.next(),                                  // surfaces auth/network/CORS/rate errors up front
+      firstTok,
       new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("gemini-stall")), 9000); })
     ]);
     clearTimeout(timer);
