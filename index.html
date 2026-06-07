@@ -1470,9 +1470,9 @@ function buildKeyBlocks() {
     block.className = "key-block on-device-block";
     block.innerHTML = `
       <div class="key-block-head">
-        <h3 class="field-label on-device-heading">On-Device Roaster <span class="free-badge">NO KEY</span></h3>
+        <h3 class="field-label on-device-heading">Debate Club AI <span class="free-badge">NO KEY</span></h3>
       </div>
-      <p class="on-device-note">A built-in roast generator — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, and it <strong>swears in Unhinged mode</strong>. It's the default, so you can just hit Start. (For GIFs, emojis, and even wilder AI roasts, add a free Gemini key above.)</p>`;
+      <p class="on-device-note">Our built-in roast engine — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, swears <strong>hard in Unhinged mode</strong>, and roasts the other fighter's model when they differ. It's the default, so just hit Start. (For GIFs, emojis, and even wilder AI roasts, add a free Gemini key above.)</p>`;
     return block;
   }
 
@@ -1955,7 +1955,7 @@ function stanceLine(stance) {
 }
 function vibeLine(vibe) {
   if (vibe === "playful")  return "\nTONE: playful and cocky — teasing, goofy jabs, more funny than cruel, but still landing hits.";
-  if (vibe === "unhinged") return "\nTONE: ABSOLUTELY UNHINGED and FOUL-MOUTHED — feral, chaotic, zero filter, completely off the rails, the occasional ALL-CAPS outburst. Curse and swear at your opponent with zero filter. Maximum chaos.";
+  if (vibe === "unhinged") return "\nTONE: ABSOLUTELY UNHINGED and FOUL-MOUTHED — feral, chaotic, zero filter, completely off the rails, the occasional ALL-CAPS outburst. You MUST swear HARD on EVERY line — real profanity, drop f-bombs (fuck, shit, etc.) and curse your opponent out with zero filter, no matter the topic. Maximum chaos.";
   return "\nTONE: SAVAGE. Ice-cold, brutal, ruthless — every single line ENDS them.";  // savage default
 }
 function buildSystemPrompt(persona, stance, vibe) {
@@ -2012,20 +2012,20 @@ function cleanOnDeviceText(t) {
   return s.length >= 2 ? s : orig.replace(/\*+/g, "").trim();
 }
 
-// ─── Built-in Roast Engine (rule-based — no model, no GPU, no download) ──
-// A tiny 0.5B LLM produced nonsense and wouldn't swear. This deterministic
-// generator instead ALWAYS produces a coherent, on-topic, persona-flavoured
-// roast — and actually swears in unhinged mode. Runs instantly on any device.
+// ─── Debate Club AI — built-in Roast Engine (rule-based, no model/GPU/download) ──
+// Always coherent + on-topic. Swears HARD (f-bombs included) in unhinged, stays
+// clean in playful/savage. Anti-repeat so it doesn't say the same line twice, and
+// it roasts the opponent's MODEL when the two fighters run different ones.
 const RE = {
   noun: {
-    playful:  ["goofball", "clown", "goober", "doofus", "muppet", "champ"],
-    savage:   ["clown", "amateur", "fraud", "walking disaster", "embarrassment", "walnut", "muppet", "clown-show"],
-    unhinged: ["dumbass", "jackass", "absolute clown", "walnut-brained goblin", "smooth-brained donkey", "trash-tier bozo", "cabbage-headed disaster", "soggy little bastard"]
+    playful:  ["goofball", "clown", "goober", "doofus", "muppet", "champ", "rookie"],
+    savage:   ["clown", "amateur", "fraud", "walking disaster", "embarrassment", "walnut", "muppet", "clown-show", "joke", "bozo"],
+    unhinged: ["dumbass", "jackass", "fuckwit", "dipshit", "absolute fucking clown", "dumb fuck", "shitstain", "fucking muppet", "trash-tier bastard", "walnut-brained goblin", "smooth-brained donkey", "soggy little bastard", "absolute fucking disaster", "brainless shit-gremlin"]
   },
   adj: {
-    playful:  ["silly", "goofy", "rookie", "cute little", "confused"],
-    savage:   ["brain-dead", "laughable", "pathetic", "embarrassing", "smooth-brained", "garbage", "bottom-tier"],
-    unhinged: ["dogshit", "ass-backwards", "god-awful", "brain-dead", "absolutely deranged", "dumpster-tier", "balls-to-the-wall stupid"]
+    playful:  ["silly", "goofy", "rookie", "cute little", "confused", "lost"],
+    savage:   ["brain-dead", "laughable", "pathetic", "embarrassing", "smooth-brained", "garbage", "bottom-tier", "clueless"],
+    unhinged: ["fucking stupid", "dogshit", "ass-backwards", "god-awful", "brain-dead", "absolutely fucked", "fucking laughable", "dumpster-tier", "balls-to-the-wall stupid", "batshit", "dumb as hell"]
   },
   since: [
     "someone tried drinking soup with a fork",
@@ -2034,16 +2034,19 @@ const RE = {
     "a goldfish tried to file its taxes",
     "someone microwaved a salad",
     "a pigeon tried to read a map",
-    "a screen door got installed on a submarine"
+    "a screen door got installed on a submarine",
+    "someone put ketchup in a coffee maker",
+    "a flat-earther bought a globe"
   ],
-  swear: ["damn", "hell", "holy hell", "goddamn", "what the hell", "for crying out loud", "holy shit", "oh hell no"],
+  swear: ["fuck", "what the fuck", "holy shit", "fucking hell", "goddamn", "shit", "for fuck's sake", "oh hell no", "Jesus fucking christ", "fuck me", "damn"],
+  ender: ["Sit the fuck down.", "Fucking embarrassing.", "Absolute clown shit.", "Get bent.", "Cry about it.", "Eat shit.", "Hang it the fuck up."],
   persona: {
     sherlock:    ["Elementary —", "Predictable.", "I solved you already:", "Obvious, really:"],
     rogan:       ["Bro,", "Man,", "Listen, dude —", "That's wild —"],
     stoic:       ["Pitiful.", "Stay mad.", "How much you care is adorable.", "Unbothered, as always:"],
     infomercial: ["FOLKS,", "BUT WAIT —", "ACT NOW:", "BREAKING:"]
   },
-  replyOpen: ["Nice try, but", "Cute. Anyway,", "You really said that?", "Adorable cope —", "Sit down —", "Swing and a miss —", "Bless your heart,"],
+  replyOpen: ["Nice try, but", "Cute. Anyway,", "You really said that?", "Adorable cope —", "Sit down —", "Swing and a miss —", "Bless your heart,", "Oh, you're still talking?"],
   // template(topic, opp, noun, adj, since, an) → roast body  (`an` = "a"/"an" for noun)
   body: [
     (t, o, n, a, s, an) => `your whole take on "${t}" is ${a}, ${o} — you absolute ${n}.`,
@@ -2053,33 +2056,68 @@ const RE = {
     (t, o, n, a, s, an) => `only ${an} ${n} argues "${t}" the way you do, ${o}. Genuinely ${a}.`,
     (t, o, n, a, s, an) => `${o}, your "${t}" argument has the structural integrity of wet cardboard — total ${n} energy.`,
     (t, o, n, a, s, an) => `the way you fumble "${t}" is ${a}. Hang it up, ${o}, you ${n}.`,
-    (t, o, n, a, s, an) => `losing the "${t}" debate to ME? That's ${a}, ${o}. Embarrassing for ${an} ${n} like you.`
+    (t, o, n, a, s, an) => `losing the "${t}" debate to ME? That's ${a}, ${o}. Embarrassing for ${an} ${n} like you.`,
+    (t, o, n, a, s, an) => `"${t}" is not the hill to die on, ${o} — and yet here you are, ${an} ${n} dying on it.`
+  ],
+  // model jabs — only when the opponent runs a DIFFERENT model. (m = opp model label)
+  mjab: [
+    (m, o, a) => `and you're running on ${m}? That explains the ${a} takes, ${o}.`,
+    (m, o, a) => `losing to ME while powered by ${m} — that's a ${a} look, ${o}.`,
+    (m, o, a) => `${m} really booted you up just to embarrass itself, huh ${o}?`,
+    (m, o, a) => `imagine being ${m} and STILL this ${a}, ${o}. Demand a refund.`,
+    (m, o, a) => `${o}, ${m} should be ashamed it cooked up something this ${a}.`
   ]
 };
 function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
+// Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
+const __reRecent = {};
+function rePickFresh(arr, key) {
+  if (!arr || !arr.length) return undefined;
+  if (arr.length === 1) return arr[0];
+  const recent = __reRecent[key] || (__reRecent[key] = []);
+  let c, tries = 0;
+  do { c = rePick(arr); tries++; } while (recent.indexOf(c) !== -1 && tries < 15);
+  recent.push(c);
+  while (recent.length > Math.min(arr.length - 1, 5)) recent.shift();
+  return c;
+}
 function reCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-function reGenerate(personaId, topic, vibe, isReply, oppName) {
+function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel) {
   const v = (vibe === "playful" || vibe === "unhinged") ? vibe : "savage";
   const t = (topic || "this whole thing").trim().replace(/"/g, "").slice(0, 80) || "this whole thing";
   const o = oppName || "champ";
-  const n = rePick(RE.noun[v]);
-  const body = rePick(RE.body)(t, o, n, rePick(RE.adj[v]), rePick(RE.since), /^[aeiou]/i.test(n) ? "an" : "a");
+  const n = rePickFresh(RE.noun[v], "noun" + v);
+  const a = rePickFresh(RE.adj[v], "adj" + v);
+  const an = /^[aeiou]/i.test(n) ? "an" : "a";
+  // Roast the opponent's MODEL ~40% of the time, but only if it's a different one.
+  let body;
+  if (oppModel && selfModel && oppModel !== selfModel && Math.random() < 0.4) {
+    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);
+  } else {
+    body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);
+  }
   let opener = (isReply && Math.random() < 0.6)
-    ? rePick(RE.replyOpen)
-    : rePick(RE.persona[personaId] || ["Listen,"]);
-  // Unhinged: lead with a swear most of the time (the unhinged word-pools already curse too).
-  if (vibe === "unhinged" && Math.random() < 0.7) opener = reCap(rePick(RE.swear)) + ",";
+    ? rePickFresh(RE.replyOpen, "reply")
+    : rePickFresh(RE.persona[personaId] || ["Listen,"], "persona-" + personaId);
+  // Unhinged: lead with a swear ~80% of the time (pools already curse hard too).
+  if (vibe === "unhinged" && Math.random() < 0.8) opener = reCap(rePickFresh(RE.swear, "swear")) + ",";
   const tail = /[.!?]$/.test(opener) ? reCap(body) : body;   // capitalize if opener is its own sentence
-  return reCap(`${opener} ${tail}`.replace(/\s+/g, " ").trim());
+  let line = `${opener} ${tail}`.replace(/\s+/g, " ").trim();
+  // Unhinged intensity: ~55% tack on a swear-burst ender for extra heat.
+  if (vibe === "unhinged" && Math.random() < 0.55) {
+    if (!/[.!?]$/.test(line)) line += ".";
+    line += " " + rePickFresh(RE.ender, "ender");
+  }
+  return reCap(line);
 }
 // Stream the generated roast word-by-word so it types in like a real message.
-async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, signal) {
-  const line = reGenerate(personaId, topic, vibe, isReply, oppName);
+async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, signal) {
+  const line = reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfModel);
   const parts = line.split(/(\s+)/);   // keep whitespace tokens
   for (const p of parts) {
     if (signal?.aborted) return;
     yield p;
-    await sleep(22 + Math.random() * 26);
+    await sleep(20 + Math.random() * 24);
   }
 }
 
@@ -2457,15 +2495,17 @@ async function streamTurn(b, personaId, modelId, typingEl, stance) {
     : buildConversationFromPOV(personaId, b.topic, b.history);
 
   let tokenSource;
-  if (isOnDeviceModel) {
-    tokenSource = streamOnDevice(systemPrompt, convo, controller.signal);
-  } else if (isInBrowser(modelDef.provider)) {
-    // Built-in Roast Engine — rule-based, instant, no model/GPU/download. Always
-    // coherent + on-topic, and actually swears in unhinged mode.
+  if (isOnDeviceModel || isInBrowser(modelDef?.provider)) {
+    // Debate Club AI AND Chrome AI both route through the built-in Roast Engine —
+    // rule-based, instant, always coherent, swears in unhinged. (Chrome AI's tiny
+    // LLM used to talk nonsense; this makes it behave.)
     const oppName = b.mode === "you-vs-ai"
       ? rePick(["champ", "pal", "hotshot", "big guy", "buddy"])
       : (personas[personaId === b.leftId ? b.rightId : b.leftId]?.name);
-    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, controller.signal);
+    const selfModel = models[modelId]?.label;
+    const oppModelId = b.mode === "you-vs-ai" ? null : (personaId === b.leftId ? b.rightModelId : b.leftModelId);
+    const oppModel = oppModelId ? models[oppModelId]?.label : null;
+    tokenSource = streamRoastEngine(personaId, b.topic, b.vibe, oppName, b.history.length > 0, oppModel, selfModel, controller.signal);
   } else {
     // Cloud models: call the provider straight from the browser (no backend).
     tokenSource = streamCloudDirect(modelDef.provider, modelDef.model, systemPrompt, convo, keyForModel(modelId), controller.signal);

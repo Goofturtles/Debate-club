@@ -10,13 +10,13 @@ export const models = {
     label: "Gemini",
     tier: "free"
   },
-  // ── No key, no download, no GPU — the built-in rule-based Roast Engine ──
-  // (id kept as -webllm for back-compat with saved selections; it now routes to
-  // streamRoastEngine, not WebLLM, because a phone-sized LLM produced nonsense.)
+  // ── Debate Club AI — the built-in rule-based Roast Engine (no key/GPU/download) ──
+  // (id kept as -webllm for back-compat with saved selections; it routes to
+  // streamRoastEngine, not an LLM, so it's always coherent and swears in unhinged.)
   "on-device-webllm": {
     provider: "webllm",
     model: "roast-engine",
-    label: "On-Device",
+    label: "Debate Club AI",
     tier: "no key"
   },
   "gemini-2-5-flash": {
@@ -75,12 +75,12 @@ export const providers = {
     recommended: true    // the easiest path that works on every device
   },
   webllm: {
-    name: "On-Device",
-    label: "On-Device",
-    color: "#a78bfa",    // soft violet — no key, runs locally
+    name: "Debate Club AI",
+    label: "Debate Club AI",
+    color: "#a78bfa",    // soft violet — the built-in no-key roast engine
     keyHelpUrl: null,
     envVar: null,
-    keyless: true,       // no API key — runs entirely in the browser (WebGPU)
+    keyless: true,       // no API key — runs entirely in the browser
     inBrowser: true
   },
   anthropic: {
