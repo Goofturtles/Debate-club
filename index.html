@@ -523,6 +523,10 @@
   .sb-stance.for     { color: #6ee7b7; background: rgba(52,211,153,0.14); }
   .sb-stance.against { color: #fca5a5; background: rgba(248,113,113,0.14); }
   .sb-stance[hidden] { display: none; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
   .sb-center { text-align: center; padding: 0 var(--s-2); }
   .sb-round-label { font-size: 10px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
   .sb-round-num {
@@ -870,7 +874,7 @@
   </div>
 
   <div class="no-keys-banner" id="no-keys-banner">
-    🔥 Playing free with the built-in roaster. Add a <strong>free Gemini key</strong> (no card) for <strong>GIFs, emojis &amp; even wilder AI roasts</strong>.
+    🔥 Playing free with the built-in roaster (GIFs &amp; emojis included). Add a <strong>free Gemini key</strong> (no card) for <strong>smarter, more varied AI roasts</strong>.
     <a href="#" id="banner-settings-link">Set up →</a>
   </div>
 
@@ -904,7 +908,7 @@
         <div class="field">
           <span class="field-label" id="lbl-stance-a">Side</span>
           <div class="seg seg--sm" id="stance-a" role="group" aria-labelledby="lbl-stance-a corner-a">
-            <button type="button" data-val="auto" class="active">Auto</button>
+            <button type="button" data-val="auto" class="active">Random</button>
             <button type="button" data-val="for">For</button>
             <button type="button" data-val="against">Against</button>
           </div>
@@ -934,7 +938,7 @@
         <div class="field">
           <span class="field-label" id="lbl-stance-b">Side</span>
           <div class="seg seg--sm" id="stance-b" role="group" aria-labelledby="lbl-stance-b corner-b">
-            <button type="button" data-val="auto" class="active">Auto</button>
+            <button type="button" data-val="auto" class="active">Random</button>
             <button type="button" data-val="for">For</button>
             <button type="button" data-val="against">Against</button>
           </div>
@@ -1003,6 +1007,8 @@
         </span>
       </div>
     </div>
+    <!-- Screen-reader-only: announces who argues which side once it's resolved (sides can be randomized). -->
+    <p class="sr-only" id="sides-announce" aria-live="polite"></p>
 
     <div class="topic-strip" id="battle-header">
       <span class="tag">Topic</span><span id="topic-shown"></span>
@@ -1409,7 +1415,7 @@ function refreshAllKeyPills() {
   // cloud key (so it isn't silently toggled away).
   if (__webllmCrashedLastLoad && !hasAnyCloudKey()) { $("no-keys-banner").classList.add("active"); return; }
   // Loud, persistent nudge: until they add a cloud key, keep reminding them that
-  // the free Gemini key unlocks gifs/emojis/real roasts the on-device model can't.
+  // the free Gemini key gives smarter, more varied AI roasts than the built-in engine.
   $("no-keys-banner").classList.toggle("active", !hasAnyCloudKey());
 }
 
@@ -1472,7 +1478,7 @@ function buildKeyBlocks() {
       <div class="key-block-head">
         <h3 class="field-label on-device-heading">Debate Club AI <span class="free-badge">NO KEY</span></h3>
       </div>
-      <p class="on-device-note">Our built-in roast engine — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, swears <strong>hard in Unhinged mode</strong>, and roasts the other fighter's model when they differ. It's the default, so just hit Start. (For GIFs, emojis, and even wilder AI roasts, add a free Gemini key above.)</p>`;
+      <p class="on-device-note">Our built-in roast engine — <strong>no key, no download, no waiting</strong>, works instantly on every phone. Always coherent and on-topic, swears <strong>hard in Unhinged mode</strong>, and roasts the other fighter's model when they differ. It's the default, so just hit Start. (For smarter, more varied AI-generated roasts, add a free Gemini key above.)</p>`;
     return block;
   }
 
@@ -1671,14 +1677,21 @@ async function startBattle() {
     $("score-right-name").textContent = right.name;
     $("sb-round-label").textContent = "Round";
     const lStance = stanceA.getValue(), rStance = stanceB.getValue();
-    setStanceBadge("left", lStance);
-    setStanceBadge("right", rStance);
+    const sideFlip = Math.random() < 0.5;   // "Random": who gets which side
+    const lKey = resolveStanceKey(lStance, true, sideFlip), rKey = resolveStanceKey(rStance, false, sideFlip);
+    // Show who's on which side of the topic at the top (e.g. "Cats" vs "Dogs").
+    const lSide = sideLabel(cfg.topic, lKey), rSide = sideLabel(cfg.topic, rKey);
+    setStanceBadge("left", lKey, lSide);
+    setStanceBadge("right", rKey, rSide);
+    // Announce the resolved sides to screen readers, since "Random" hides them visually.
+    const ann = $("sides-announce");
+    if (ann) ann.textContent = (lSide && rSide) ? `${left.name} argues ${lSide}, ${right.name} argues ${rSide}.` : "";
     battle = {
       mode, topic: cfg.topic, vibe,
       leftId: cfg.aId, rightId: cfg.bId,
       leftModelId: cfg.modelAId, rightModelId: cfg.modelBId,
       leftStance: lStance, rightStance: rStance,
-      sideFlip: Math.random() < 0.5,   // auto: randomize which fighter gets which side
+      sideFlip,
       maxTurns: parseInt(roundsSeg.getValue(), 10) || 10,
       history: [], stopped: false, abort: null
     };
@@ -2085,7 +2098,14 @@ const RE = {
     ab: [ (c, x) => `it's ${c}, not ${x}`, (c, x) => `${c} clears ${x} every single time`, (c, x) => `team ${c}, always`, (c, x) => `${x} over ${c}? not a chance`, (c, x) => `${c} wins, ${x} is a clown take` ],
     yn: [ (yes, t) => `it's a ${yes ? "yes" : "no"}, obviously`, (yes, t) => `the ${yes ? "yes" : "no"} side runs this debate`, (yes, t) => `"${t}"? ${yes ? "hell yes" : "hell no"}`, (yes, t) => `${yes ? "yeah it is" : "nope, it's not"}, end of story` ],
     st: [ (pro, t) => pro ? `"${t}" is elite` : `"${t}" is straight garbage`, (pro, t) => pro ? `I'm all for "${t}"` : `"${t}"? hard pass`, (pro, t) => pro ? `"${t}" stays winning` : `"${t}" is a disaster` ]
-  }
+  },
+  // trending emojis (vibe-appropriate) + roast-reaction gif searches (Tenor)
+  emoji: {
+    playful:  ["😏", "😎", "😜", "🤭", "👀", "💅"],
+    savage:   ["💀", "🔥", "😭", "🫡", "💯", "🥀"],
+    unhinged: ["💀", "🔥", "😭", "🤡", "☠️", "💀🔥", "🫦"]
+  },
+  gifq: ["mic drop", "roasted", "oh no he didn't", "shots fired", "savage", "facepalm", "deal with it", "crying laughing", "destroyed", "you got served", "bruh moment", "popcorn"]
 };
 function rePick(a) { return a[Math.floor(Math.random() * a.length)]; }
 // Avoid repeating the same pick back-to-back (so no "ass-backwards" twice in a row).
@@ -2138,12 +2158,12 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
 
   let body;
   const r = Math.random();
-  if (oppModel && selfModel && oppModel !== selfModel && r < 0.22) {
-    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL
-  } else if (r < 0.62) {
-    body = `${sideClause()}, ${o} — ${jab()}`;                    // argue the topic + roast their character
+  if (oppModel && selfModel && oppModel !== selfModel && r < 0.12) {
+    body = rePickFresh(RE.mjab, "mjab")(oppModel, o, a);          // roast the opponent's MODEL (rare)
   } else if (r < 0.86) {
-    body = `${jab()}, ${o}`;                                      // pure character roast
+    body = `${sideClause()}, ${o} — ${jab()}`;                    // MOST: argue the topic + roast their character
+  } else if (r < 0.93) {
+    body = `${jab()}, ${o}`;                                      // occasional pure character roast
   } else {
     body = rePickFresh(RE.body, "body")(t, o, n, a, rePickFresh(RE.since, "since"), an);  // generic, for variety
   }
@@ -2161,7 +2181,12 @@ function reGenerate(personaId, topic, vibe, isReply, oppName, oppModel, selfMode
   if (!/[.!?]$/.test(line)) line += ".";
   // Unhinged intensity: ~55% tack on a swear-burst ender.
   if (vibe === "unhinged" && Math.random() < 0.55) line += " " + rePickFresh(RE.ender, "ender");
-  return reCap(line);
+  line = reCap(line);
+  // Trending emoji ~60% of the time.
+  if (Math.random() < 0.6) line += " " + rePickFresh(RE.emoji[v], "emoji");
+  // Reaction GIF ~28% (renderRichBubble turns [gif: …] into a real Tenor gif).
+  if (Math.random() < 0.28) line += ` [gif: ${Math.random() < 0.35 ? t.slice(0, 30) : rePick(RE.gifq)}]`;
+  return line;
 }
 // Stream the generated roast word-by-word so it types in like a real message.
 async function* streamRoastEngine(personaId, topic, vibe, oppName, isReply, oppModel, selfModel, myKey, oppId, signal) {
@@ -2791,8 +2816,8 @@ function appendSystemMessage(text) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
-// After an on-device battle (no cloud key), drop a clickable nudge — the tiny
-// model can't do gifs/emojis/real character voices, but the free Gemini key can.
+// After an on-device battle (no cloud key), drop a clickable nudge — the built-in
+// engine is template-based, while the free Gemini key gives smarter, more varied roasts.
 function maybeNudgeAfterOnDevice(b) {
   if (!b || hasAnyCloudKey()) return;
   const usedOnDevice = [b.leftModelId, b.rightModelId].some((id) => {
@@ -2802,7 +2827,7 @@ function maybeNudgeAfterOnDevice(b) {
   const group = document.createElement("div");
   group.className = "msg-group left";
   group.style.alignSelf = "center"; group.style.maxWidth = "100%";
-  group.innerHTML = `<button type="button" class="nudge-bubble">🔥 Want GIFs, emojis &amp; even wilder AI roasts? Add a <strong>free Gemini key</strong> (no card) →</button>`;
+  group.innerHTML = `<button type="button" class="nudge-bubble">🔥 Want smarter, more varied AI roasts? Add a <strong>free Gemini key</strong> (no card) →</button>`;
   group.querySelector(".nudge-bubble").addEventListener("click", openSettings);
   $("thread").appendChild(group);
   scrollToBottom();
@@ -2813,13 +2838,25 @@ function updateCounter(n) {
 }
 
 // Scoreboard "who's on whose side" badge. Auto = hidden (the AI picks its own).
-function setStanceBadge(side, stance) {
+// Which side ("a"/"b") a fighter argues: explicit for/against, else random (sideFlip).
+function resolveStanceKey(stance, isLeft, sideFlip) {
+  const eff = (stance === "for" || stance === "against") ? stance : (isLeft !== !!sideFlip ? "for" : "against");
+  return eff === "against" ? "b" : "a";
+}
+// Readable label for the side, parsed from the topic (Cats / Dogs, YES / NO, FOR / AGAINST).
+function sideLabel(topic, key) {
+  const s = reSides(topic);
+  if (s.kind === "ab") return reCap(key === "a" ? s.a : s.b);
+  if (s.kind === "yn") return key === "a" ? "YES" : "NO";
+  return key === "a" ? "FOR" : "AGAINST";
+}
+function setStanceBadge(side, key, label) {
   const el = $(`score-${side}-stance`);
   if (!el) return;
   el.classList.remove("for", "against");
-  if (stance === "for" || stance === "against") {
-    el.textContent = stance === "for" ? "FOR" : "AGAINST";
-    el.classList.add(stance);
+  if (label) {
+    el.textContent = label.length > 16 ? label.slice(0, 15) + "…" : label;
+    el.classList.add(key === "b" ? "against" : "for");
     el.hidden = false;
   } else {
     el.textContent = "";
